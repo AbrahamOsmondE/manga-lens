@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  manga-translator:
+    image: zyddnys/manga-image-translator:main
+    entrypoint: ["python", "/app/server/main.py"]
+    command: ["--host=0.0.0.0", "--port=5003", "--nonce=None"]
+    working_dir: /app
+    ports:
+      - "5003:5003"
+      - "5004:5004"
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_MODEL=gemini-2.5-flash-lite
+    ipc: host
+    restart: unless-stopped
