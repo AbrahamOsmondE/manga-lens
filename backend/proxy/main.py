@@ -22,7 +22,7 @@ DATABASE_URL      = os.environ["DATABASE_URL"]
 STRIPE_WEBHOOK_SECRET = os.environ["STRIPE_WEBHOOK_SECRET"]
 stripe.api_key    = os.environ["STRIPE_SECRET_KEY"]
 
-DAILY_LIMIT = {"free": 50, "paid": None}
+DAILY_LIMIT = {"free": 10, "paid": None}
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)

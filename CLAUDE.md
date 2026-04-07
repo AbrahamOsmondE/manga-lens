@@ -182,7 +182,7 @@ Chrome Extension (Manifest V3)
 Auth Proxy  (port 443 via nginx, GCE instance)
         │  1. Verify Google ID token with Google's public keys
         │  2. Identify user — create record if first visit
-        │  3. Check daily quota (free: 50/day, paid: unlimited)
+        │  3. Check daily quota (free: 10/day, paid: unlimited)
         │  4. Enforce per-IP + per-user rate limits
         │  5. Increment usage counter in DB
         ▼
@@ -248,7 +248,7 @@ Key behaviours:
 2. **User upsert**: `INSERT INTO users ... ON CONFLICT (google_id) DO UPDATE` — creates on first visit, returns existing on subsequent visits.
 3. **Quota check**:
    ```python
-   DAILY_LIMIT = {"free": 50, "paid": None}
+   DAILY_LIMIT = {"free": 10, "paid": None}
 
    # Atomically increment and read
    row = await db.fetchrow("""
@@ -399,7 +399,7 @@ async function getToken() {
 
 States:
 1. **Signed out** — show "Sign in with Google" button
-2. **Signed in, free tier** — show toggle, pages used today / 50, "Upgrade" link
+2. **Signed in, free tier** — show toggle, pages used today / 10, "Upgrade" link
 3. **Signed in, paid tier** — show toggle, pages used today (no cap shown)
 4. **Quota exceeded** — show "Daily limit reached. Upgrade at mangalens.app"
 
@@ -531,8 +531,9 @@ cat ~/.ssh/manga-lens-deploy
 
 1. Create account at stripe.com
 2. Create two products:
-   - **MangaLens Basic** — recurring $9.90/month. Note the Price ID.
-   - Create a coupon for $4.90 (launch discount) — apply it at checkout, not as a separate price
+   - **MangaLens Monthly** — recurring $3.99/month. Note the Price ID → `STRIPE_PRICE_ID_MONTHLY`
+   - **MangaLens Annual** — recurring $24.99/year. Note the Price ID → `STRIPE_PRICE_ID_ANNUAL`
+   - Create a coupon: **first month free** (100% off, duration: once) → apply at Checkout for new subscribers
 3. Add webhook endpoint: `https://api.mangalens.app/webhook/stripe`
    - Events: `customer.subscription.updated`, `customer.subscription.deleted`
 4. Copy the webhook signing secret to `backend/.env` as `STRIPE_WEBHOOK_SECRET`
@@ -552,7 +553,7 @@ cat ~/.ssh/manga-lens-deploy
 ### Definition of Done — Phase 2
 
 1. Unauthenticated requests to the proxy return `401`
-2. Free users are blocked after 50 translations in a day (proxy returns `429`)
+2. Free users are blocked after 10 translations in a day (proxy returns `429`)
 3. Stripe payment upgrades user to `paid` tier; proxy allows unlimited translations immediately
 4. Cancelling a Stripe subscription downgrades user back to `free`
 5. Backend is reachable at `https://api.mangalens.app` with a valid TLS certificate
@@ -576,7 +577,7 @@ Phase 3 adds a public-facing website that serves as the product landing page, us
 |---|---|
 | Home | Landing page — what MangaLens is, screenshots, pricing table, Chrome Web Store install button |
 | Dashboard | Sign in with Google → shows current tier, pages used today, upgrade/cancel subscription link |
-| Pricing | Tier comparison table ($0 free / $9.90 paid with $4.90 launch coupon) with Stripe Checkout |
+| Pricing | Tier comparison table — Free (10 pages/day) / Monthly $3.99 / Annual $24.99 (48% off) — with "first month free" badge and Stripe Checkout buttons |
 | Contact | Simple contact form (name, email, message) |
 
 No separate sign-up page needed — Google OAuth handles auth for both the extension and the website.
@@ -712,7 +713,8 @@ All three can be set up as separate forwarding rules in Cloudflare pointing to t
 | `DATABASE_URL` | proxy | 2+ | Supabase postgres connection string |
 | `STRIPE_SECRET_KEY` | proxy | 2+ | Stripe secret key |
 | `STRIPE_WEBHOOK_SECRET` | proxy | 2+ | Stripe webhook signing secret |
-| `STRIPE_PRICE_ID` | proxy/website | 2+ | Stripe Price ID for $9.90/month plan |
+| `STRIPE_PRICE_ID_MONTHLY` | proxy/website | 2+ | Stripe Price ID for $3.99/month plan |
+| `STRIPE_PRICE_ID_ANNUAL` | proxy/website | 2+ | Stripe Price ID for $24.99/year plan |
 | `NEXTAUTH_SECRET` | website | 3+ | Random secret for NextAuth session signing |
 | `NEXTAUTH_URL` | website | 3+ | Public URL of the website (`https://mangalens.app`) |
 
@@ -724,5 +726,5 @@ All three can be set up as separate forwarding rules in Cloudflare pointing to t
 2. **GOOGLE_CLIENT_ID** — GCP Console → APIs & Services → Credentials → Chrome Extension OAuth client
 3. **GCP account** — needed for Phase 2 GCE instance
 4. **Supabase project** — create at supabase.com, copy the `DATABASE_URL` connection string
-5. **Stripe account** — needed for Phase 2 subscription ($9.90/month product + $4.90 coupon)
+5. **Stripe account** — needed for Phase 2 subscriptions ($3.99/month, $24.99/year, first-month-free coupon)
 6. **Domain name** — `mangalens.app` (or similar) — needed before Phase 2C
