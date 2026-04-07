@@ -1,0 +1,6 @@
+fastapi
+uvicorn
+httpx
+asyncpg
+slowapi
+stripe
