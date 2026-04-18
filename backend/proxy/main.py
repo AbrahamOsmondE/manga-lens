@@ -4,7 +4,14 @@ import os
 import socket
 import time
 from datetime import datetime, timezone
-from urllib.parse import urlparse, urlunparse
+
+# Force IPv4-only DNS resolution — Docker on GCE has no IPv6 routing.
+# Patching getaddrinfo means asyncpg still uses the original hostname for
+# TLS SNI (required by Supabase Supavisor) while connecting over IPv4.
+_orig_getaddrinfo = socket.getaddrinfo
+def _getaddrinfo_ipv4(host, port, family=0, type=0, proto=0, flags=0):
+    return _orig_getaddrinfo(host, port, socket.AF_INET, type, proto, flags)
+socket.getaddrinfo = _getaddrinfo_ipv4
 
 import asyncpg
 import httpx
@@ -25,19 +32,6 @@ STRIPE_WEBHOOK_SECRET = os.environ["STRIPE_WEBHOOK_SECRET"]
 stripe.api_key    = os.environ["STRIPE_SECRET_KEY"]
 
 DAILY_LIMIT = {"free": 20, "paid": None, "admin": None}
-
-
-def _force_ipv4_url(url: str) -> str:
-    """Replace the hostname in the DB URL with its IPv4 address.
-    Needed on GCE where Docker containers have no IPv6 routing."""
-    parsed = urlparse(url)
-    try:
-        infos = socket.getaddrinfo(parsed.hostname, parsed.port, socket.AF_INET)
-        ipv4 = infos[0][4][0]
-        netloc = parsed.netloc.replace(parsed.hostname, ipv4)
-        return urlunparse(parsed._replace(netloc=netloc))
-    except (socket.gaierror, IndexError):
-        return url
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -60,7 +54,7 @@ db: asyncpg.Pool | None = None
 @app.on_event("startup")
 async def startup():
     global db
-    db = await asyncpg.create_pool(_force_ipv4_url(DATABASE_URL), min_size=1, max_size=5)
+    db = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=5)
     # Create tables if they don't exist yet (idempotent)
     async with db.acquire() as conn:
         await conn.execute("""
