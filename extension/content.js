@@ -1,4 +1,4 @@
-const BACKEND_URL = "https://api.mangalens.app";
+const BACKEND_URL = "https://api.manga-lens.com";
 
 const CONFIG = {
   ocr: { ocr: "48px", ignore_bubble: 5 },

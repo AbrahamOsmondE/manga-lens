@@ -11,7 +11,7 @@ MangaLens is a system that translates Japanese manga pages into English in real 
 ```
 Chrome Extension (Manifest V3)
         │
-        │  POST https://api.mangalens.app/translate/image
+        │  POST https://api.manga-lens.com/translate/image
         │  Authorization: Bearer <google_id_token>
         ▼
 nginx (port 443, TLS termination)
@@ -176,7 +176,7 @@ Phase 2 is the full production system: a secure backend with Google OAuth, per-u
 ```
 Chrome Extension (Manifest V3)
         │
-        │  POST https://api.mangalens.app/translate/image
+        │  POST https://api.manga-lens.com/translate/image
         │  Authorization: Bearer <google_id_token>
         ▼
 Auth Proxy  (port 443 via nginx, GCE instance)
@@ -261,7 +261,7 @@ Key behaviours:
 
    limit = DAILY_LIMIT[tier]
    if limit and row["page_count"] > limit:
-       raise HTTPException(429, "Daily limit reached. Upgrade at mangalens.app")
+       raise HTTPException(429, "Daily limit reached. Upgrade at manga-lens.com")
    ```
 4. **Rate limiting** (slowapi):
    - Per IP: 30 requests/minute (blocks scrapers)
@@ -386,7 +386,7 @@ The `client_id` in the manifest is intentionally public — it cannot be used to
 - Translation request header: `Authorization: Bearer <token>`
 
 ```js
-const BACKEND_URL = "https://api.mangalens.app";
+const BACKEND_URL = "https://api.manga-lens.com";
 
 async function getToken() {
   return new Promise(resolve =>
@@ -401,7 +401,7 @@ States:
 1. **Signed out** — show "Sign in with Google" button
 2. **Signed in, free tier** — show toggle, pages used today / 10, "Upgrade" link
 3. **Signed in, paid tier** — show toggle, pages used today (no cap shown)
-4. **Quota exceeded** — show "Daily limit reached. Upgrade at mangalens.app"
+4. **Quota exceeded** — show "Daily limit reached. Upgrade at manga-lens.com"
 
 Token refresh: call `chrome.identity.getAuthToken({ interactive: false })` on popup open to silently refresh; only prompt interactively if silent refresh fails.
 
@@ -419,7 +419,7 @@ Token refresh: call `chrome.identity.getAuthToken({ interactive: false })` on po
 
 #### Purchase domain
 
-Buy `mangalens.app` (or similar) from any registrar (Namecheap, Cloudflare Registrar, etc.).
+Buy `manga-lens.com` (or similar) from any registrar (Namecheap, Cloudflare Registrar, etc.).
 
 #### DNS setup
 
@@ -437,18 +437,18 @@ sudo apt-get install -y nginx certbot python3-certbot-nginx
 # Nginx config: /etc/nginx/sites-available/mangalens
 server {
     listen 80;
-    server_name api.mangalens.app;
+    server_name api.manga-lens.com;
     location / { proxy_pass http://localhost:8080; }
 }
 
 # Get certificate
-sudo certbot --nginx -d api.mangalens.app
+sudo certbot --nginx -d api.manga-lens.com
 
 # certbot auto-renews via systemd timer — verify with:
 sudo certbot renew --dry-run
 ```
 
-After this, the proxy is reachable at `https://api.mangalens.app/translate/image`.
+After this, the proxy is reachable at `https://api.manga-lens.com/translate/image`.
 Update `BACKEND_URL` in `content.js` to use this URL.
 
 #### GCP Firewall updates
@@ -459,7 +459,7 @@ Update `BACKEND_URL` in `content.js` to use this URL.
 
 #### Phase 2C complete when
 
-- `https://api.mangalens.app` responds
+- `https://api.manga-lens.com` responds
 - HTTP redirects to HTTPS
 - Certificate is valid and auto-renewing
 - Port `8080` and `5003` are not publicly accessible
@@ -534,7 +534,7 @@ cat ~/.ssh/manga-lens-deploy
    - **MangaLens Monthly** — recurring $3.99/month. Note the Price ID → `STRIPE_PRICE_ID_MONTHLY`
    - **MangaLens Annual** — recurring $24.99/year. Note the Price ID → `STRIPE_PRICE_ID_ANNUAL`
    - Create a coupon: **first month free** (100% off, duration: once) → apply at Checkout for new subscribers
-3. Add webhook endpoint: `https://api.mangalens.app/webhook/stripe`
+3. Add webhook endpoint: `https://api.manga-lens.com/webhook/stripe`
    - Events: `customer.subscription.updated`, `customer.subscription.deleted`
 4. Copy the webhook signing secret to `backend/.env` as `STRIPE_WEBHOOK_SECRET`
 
@@ -546,7 +546,7 @@ cat ~/.ssh/manga-lens-deploy
 2. Create an OAuth 2.0 Client ID → Application type: **Chrome Extension**
 3. Set the Extension ID (get it from `chrome://extensions` after first load)
 4. Copy the Client ID → add to `manifest.json` and `backend/.env` as `GOOGLE_CLIENT_ID`
-5. Add authorised JavaScript origins: `https://api.mangalens.app`
+5. Add authorised JavaScript origins: `https://api.manga-lens.com`
 
 ---
 
@@ -556,7 +556,7 @@ cat ~/.ssh/manga-lens-deploy
 2. Free users are blocked after 10 translations in a day (proxy returns `429`)
 3. Stripe payment upgrades user to `paid` tier; proxy allows unlimited translations immediately
 4. Cancelling a Stripe subscription downgrades user back to `free`
-5. Backend is reachable at `https://api.mangalens.app` with a valid TLS certificate
+5. Backend is reachable at `https://api.manga-lens.com` with a valid TLS certificate
 6. Pushing to `main` deploys automatically via GitHub Actions
 7. Extension translates a real manga page end-to-end with a real Google account
 8. No hardcoded secrets anywhere in the extension source
@@ -591,7 +591,7 @@ No separate sign-up page needed — Google OAuth handles auth for both the exten
 - **Payments**: Stripe Checkout (`mode: "subscription"`) — links to existing Phase 2 Stripe products
 - **Database**: same Supabase instance as Phase 2 — website reads `users`, `daily_usage`, `subscriptions`
 - **Hosting**: Vercel (free tier sufficient for low traffic)
-- **Domain**: `mangalens.app` → already set up in Phase 2C
+- **Domain**: `manga-lens.com` → already set up in Phase 2C
 
 DNS additions for Phase 3:
 
@@ -641,7 +641,7 @@ Use **Cloudflare Email Routing** (free) to receive email at your domain and forw
 
 #### Step 1 — Move DNS to Cloudflare (recommended, free)
 
-1. Create a Cloudflare account and add `mangalens.app`
+1. Create a Cloudflare account and add `manga-lens.com`
 2. Cloudflare will import your existing DNS records automatically
 3. Update your registrar's nameservers to Cloudflare's nameservers
 4. Wait for propagation (~minutes to hours)
@@ -649,41 +649,64 @@ Use **Cloudflare Email Routing** (free) to receive email at your domain and forw
 #### Step 2 — Enable Email Routing in Cloudflare
 
 1. In Cloudflare dashboard → **Email** → **Email Routing** → Enable
-2. Add a custom address: e.g. `hello@mangalens.app` → forwards to `your.gmail@gmail.com`
+2. Add a custom address: e.g. `hello@manga-lens.com` → forwards to `your.gmail@gmail.com`
 3. Cloudflare adds the required MX and SPF records automatically
 4. Verify your Gmail address when prompted
 
-You can now receive email at `hello@mangalens.app`.
+You can now receive email at `hello@manga-lens.com`.
 
 #### Step 3 — Send email from Gmail using your domain address
 
 1. In Gmail → Settings → **Accounts and Import** → **Send mail as** → Add another email address
-2. Enter `hello@mangalens.app`, untick "Treat as alias"
+2. Enter `hello@manga-lens.com`, untick "Treat as alias"
 3. SMTP server: `smtp.gmail.com`, port `587`, your Gmail address and an **App Password**
    - Generate App Password: Google Account → Security → 2-Step Verification → App Passwords
 4. Verify ownership via the confirmation email
-5. Gmail now lets you choose `hello@mangalens.app` as the From address when composing
+5. Gmail now lets you choose `hello@manga-lens.com` as the From address when composing
 
 #### Suggested email addresses to set up
 
 | Address | Purpose |
 |---|---|
-| `hello@mangalens.app` | General contact (shown on website Contact page) |
-| `noreply@mangalens.app` | Transactional emails (Stripe receipts forward here) |
-| `support@mangalens.app` | Support alias — forward to same Gmail inbox |
+| `hello@manga-lens.com` | General contact (shown on website Contact page) |
+| `noreply@manga-lens.com` | Transactional emails (Stripe receipts forward here) |
+| `support@manga-lens.com` | Support alias — forward to same Gmail inbox |
 
 All three can be set up as separate forwarding rules in Cloudflare pointing to the same Gmail.
 
 ---
 
+### Planned Features — Phase 3
+
+#### Regional Pricing (PPP)
+Create per-currency Stripe Price objects and route to the correct one at checkout based on the user's country (detected from IP or Google profile). Example prices:
+
+| Region | Monthly | Annual |
+|---|---|---|
+| USD | $3.99 | $24.99 |
+| IDR | Rp 30,000 | Rp 199,000 |
+
+Implementation: at Stripe Checkout creation, detect country → select matching Price ID. Start with USD only at launch; add other currencies when the website checkout is built.
+
+#### Admin / Whitelist Users
+To grant unlimited access to yourself or others without paying, set `tier = 'admin'` directly in Supabase:
+
+```sql
+UPDATE users SET tier = 'admin' WHERE email = 'your@email.com';
+```
+
+The proxy already supports `tier = 'admin'` — it bypasses quota and usage tracking entirely. No code changes needed.
+
+---
+
 ### Definition of Done — Phase 3
 
-1. Website is live at `https://mangalens.app`
+1. Website is live at `https://manga-lens.com`
 2. "Sign in with Google" on the website logs the user in and shows their tier + daily usage
 3. Stripe Checkout on the Pricing page completes a real subscription
 4. After payment, the dashboard immediately reflects `paid` tier
-5. Extension popup has an "Open Dashboard" button linking to `https://mangalens.app`
-6. Email at `hello@mangalens.app` receives and forwards correctly
+5. Extension popup has an "Open Dashboard" button linking to `https://manga-lens.com`
+6. Email at `hello@manga-lens.com` receives and forwards correctly
 
 ---
 
@@ -716,7 +739,7 @@ All three can be set up as separate forwarding rules in Cloudflare pointing to t
 | `STRIPE_PRICE_ID_MONTHLY` | proxy/website | 2+ | Stripe Price ID for $3.99/month plan |
 | `STRIPE_PRICE_ID_ANNUAL` | proxy/website | 2+ | Stripe Price ID for $24.99/year plan |
 | `NEXTAUTH_SECRET` | website | 3+ | Random secret for NextAuth session signing |
-| `NEXTAUTH_URL` | website | 3+ | Public URL of the website (`https://mangalens.app`) |
+| `NEXTAUTH_URL` | website | 3+ | Public URL of the website (`https://manga-lens.com`) |
 
 ---
 
@@ -727,4 +750,4 @@ All three can be set up as separate forwarding rules in Cloudflare pointing to t
 3. **GCP account** — needed for Phase 2 GCE instance
 4. **Supabase project** — create at supabase.com, copy the `DATABASE_URL` connection string
 5. **Stripe account** — needed for Phase 2 subscriptions ($3.99/month, $24.99/year, first-month-free coupon)
-6. **Domain name** — `mangalens.app` (or similar) — needed before Phase 2C
+6. **Domain name** — `manga-lens.com` (or similar) — needed before Phase 2C

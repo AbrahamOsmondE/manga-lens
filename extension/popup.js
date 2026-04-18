@@ -1,5 +1,5 @@
-const BACKEND_URL = "https://api.mangalens.app";
-const STRIPE_PAYMENT_URL = "https://mangalens.app/pricing";
+const BACKEND_URL = "https://api.manga-lens.com";
+const STRIPE_PAYMENT_URL = "https://manga-lens.com/pricing";
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
 

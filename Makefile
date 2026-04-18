@@ -6,7 +6,7 @@ endif
 
 # ── GCP defaults (override in backend/.env) ───────────────────────────────────
 GCE_INSTANCE ?= manga-lens-server
-GCE_ZONE     ?= us-central1-a
+GCE_ZONE     ?= asia-southeast1-b
 
 # ── Local development ─────────────────────────────────────────────────────────
 
@@ -46,7 +46,7 @@ deploy:
 
 ## Follow container logs on the remote instance
 logs-remote:
-	gcloud compute ssh $(GCE_INSTANCE) --zone=$(GCE_ZONE) -- "docker-compose logs -f"
+	gcloud compute ssh $(GCE_INSTANCE) --zone=$(GCE_ZONE) -- "cd ~/manga-lens/backend && docker-compose logs -f"
 
 ## Verify proxy auth and firewall rules on the live instance
 smoke-test:

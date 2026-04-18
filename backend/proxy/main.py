@@ -1,8 +1,10 @@
 import hashlib
 import logging
 import os
+import socket
 import time
 from datetime import datetime, timezone
+from urllib.parse import urlparse, urlunparse
 
 import asyncpg
 import httpx
@@ -22,7 +24,20 @@ DATABASE_URL      = os.environ["DATABASE_URL"]
 STRIPE_WEBHOOK_SECRET = os.environ["STRIPE_WEBHOOK_SECRET"]
 stripe.api_key    = os.environ["STRIPE_SECRET_KEY"]
 
-DAILY_LIMIT = {"free": 10, "paid": None}
+DAILY_LIMIT = {"free": 20, "paid": None, "admin": None}
+
+
+def _force_ipv4_url(url: str) -> str:
+    """Replace the hostname in the DB URL with its IPv4 address.
+    Needed on GCE where Docker containers have no IPv6 routing."""
+    parsed = urlparse(url)
+    try:
+        infos = socket.getaddrinfo(parsed.hostname, parsed.port, socket.AF_INET)
+        ipv4 = infos[0][4][0]
+        netloc = parsed.netloc.replace(parsed.hostname, ipv4)
+        return urlunparse(parsed._replace(netloc=netloc))
+    except (socket.gaierror, IndexError):
+        return url
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -45,7 +60,7 @@ db: asyncpg.Pool | None = None
 @app.on_event("startup")
 async def startup():
     global db
-    db = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=5)
+    db = await asyncpg.create_pool(_force_ipv4_url(DATABASE_URL), min_size=1, max_size=5)
     # Create tables if they don't exist yet (idempotent)
     async with db.acquire() as conn:
         await conn.execute("""
@@ -123,7 +138,11 @@ async def check_and_increment_quota(user_id, tier: str) -> int:
     """
     Atomically increment daily usage. Returns the new page_count.
     Raises 429 if the free limit is exceeded.
+    Admin tier bypasses quota and usage tracking entirely.
     """
+    if tier == "admin":
+        return 0
+
     today = datetime.now(timezone.utc).date()
     row = await db.fetchrow(
         """
@@ -140,7 +159,7 @@ async def check_and_increment_quota(user_id, tier: str) -> int:
     if limit is not None and count > limit:
         raise HTTPException(
             429,
-            f"Daily limit of {limit} pages reached. Upgrade at mangalens.app",
+            f"Daily limit of {limit} pages reached. Upgrade at manga-lens.com",
         )
     return count
 
@@ -206,6 +225,9 @@ async def usage(request: Request):
 
     identity = await verify_google_token(token)
     user = await get_or_create_user(identity["google_id"], identity["email"])
+
+    if user["tier"] == "admin":
+        return {"tier": "admin", "pages_today": 0, "daily_limit": None}
 
     today = datetime.now(timezone.utc).date()
     row = await db.fetchrow(

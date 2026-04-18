@@ -6,7 +6,7 @@
   "permissions": ["activeTab", "storage", "scripting", "identity"],
   "host_permissions": ["<all_urls>"],
   "oauth2": {
-    "client_id": "REPLACE_WITH_GOOGLE_CLIENT_ID.apps.googleusercontent.com",
+    "client_id": "920084486170-7obru0qj88ne0fj6reaom34t390975ft.apps.googleusercontent.com",
     "scopes": ["openid", "email", "profile"]
   },
   "background": {

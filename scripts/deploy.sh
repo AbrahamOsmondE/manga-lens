@@ -1,7 +1,6 @@
 #!/bin/bash
-# Copies backend files to the GCE instance and starts the containers.
+# Deploys to the GCE instance via SSH (no scp required).
 # Run via: make deploy
-# Requires: GCE_INSTANCE, GCE_ZONE set in backend/.env
 set -euo pipefail
 
 : "${GCE_INSTANCE:?GCE_INSTANCE is not set. Add it to backend/.env}"
@@ -9,18 +8,20 @@ set -euo pipefail
 
 echo "=== Deploying to ${GCE_INSTANCE} (${GCE_ZONE}) ==="
 
-echo "[1/3] Copying files..."
-gcloud compute scp backend/docker-compose.yml "${GCE_INSTANCE}":~/ --zone="${GCE_ZONE}"
-gcloud compute scp backend/.env              "${GCE_INSTANCE}":~/ --zone="${GCE_ZONE}"
-gcloud compute scp -r backend/proxy          "${GCE_INSTANCE}":~/proxy/ --zone="${GCE_ZONE}"
+echo "[1/3] Pushing .env to server..."
+ENV_CONTENTS=$(cat backend/.env)
+gcloud compute ssh "${GCE_INSTANCE}" --zone="${GCE_ZONE}" -- \
+    "cat > ~/manga-lens/backend/.env << 'ENVEOF'
+${ENV_CONTENTS}
+ENVEOF"
 
 echo "[2/3] Building and starting containers..."
 gcloud compute ssh "${GCE_INSTANCE}" --zone="${GCE_ZONE}" -- \
-    "docker-compose up -d --build"
+    "cd ~/manga-lens && git pull origin main && cd backend && docker-compose up -d --build"
 
 echo "[3/3] Container status:"
 gcloud compute ssh "${GCE_INSTANCE}" --zone="${GCE_ZONE}" -- \
-    "docker-compose ps"
+    "cd ~/manga-lens/backend && docker-compose ps"
 
 echo ""
 echo "Deploy complete."
