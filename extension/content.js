@@ -171,13 +171,63 @@ function isMangaImage(img) {
   return true;
 }
 
+function maybeTranslate(img) {
+  if (!isMangaImage(img)) return;
+  img.dataset.mlQueued = "1";
+  translateImage(img);
+}
+
 function processPage() {
   document.querySelectorAll("img").forEach((img) => {
-    if (isMangaImage(img)) {
-      img.dataset.mlQueued = "1";
-      translateImage(img); // fire concurrently — all spinners appear at once
+    if (img.complete) {
+      maybeTranslate(img);
+    } else {
+      img.addEventListener("load", () => maybeTranslate(img), { once: true });
     }
   });
+}
+
+// ── Lazy-load observer ────────────────────────────────────────────────────────
+
+let observer = null;
+
+function startObserving() {
+  if (observer) return;
+  observer = new MutationObserver((mutations) => {
+    for (const mutation of mutations) {
+      // New <img> nodes added to DOM
+      for (const node of mutation.addedNodes) {
+        if (node.nodeName === "IMG") {
+          node.complete ? maybeTranslate(node)
+            : node.addEventListener("load", () => maybeTranslate(node), { once: true });
+        }
+        if (node.querySelectorAll) {
+          node.querySelectorAll("img").forEach((img) => {
+            img.complete ? maybeTranslate(img)
+              : img.addEventListener("load", () => maybeTranslate(img), { once: true });
+          });
+        }
+      }
+      // src swapped on an existing <img> (common lazy-load pattern)
+      if (mutation.type === "attributes" && mutation.target.nodeName === "IMG") {
+        const img = mutation.target;
+        delete img.dataset.mlQueued; // src changed — treat as new image
+        img.complete ? maybeTranslate(img)
+          : img.addEventListener("load", () => maybeTranslate(img), { once: true });
+      }
+    }
+  });
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ["src"],
+  });
+}
+
+function stopObserving() {
+  observer?.disconnect();
+  observer = null;
 }
 
 // ── Message listener ──────────────────────────────────────────────────────────
@@ -186,9 +236,11 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg.type === "TOGGLE_ON") {
     isEnabled = true;
     processPage();
+    startObserving();
     sendResponse({ ok: true });
   } else if (msg.type === "TOGGLE_OFF") {
     isEnabled = false;
+    stopObserving();
     sendResponse({ ok: true });
   } else if (msg.type === "PING") {
     sendResponse({ ok: true });
