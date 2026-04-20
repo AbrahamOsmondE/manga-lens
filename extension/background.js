@@ -55,6 +55,23 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
+  if (msg.type === "FETCH_IMAGE_DATA") {
+    fetch(msg.url)
+      .then(r => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.blob();
+      })
+      .then(blob => new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      }))
+      .then(sendResponse)
+      .catch(() => sendResponse(null));
+    return true;
+  }
+
   if (msg.type === "SIGN_IN") {
     getIdToken(true).then(sendResponse);
     return true;

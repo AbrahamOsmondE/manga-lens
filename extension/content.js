@@ -98,8 +98,7 @@ async function translateImage(img) {
       return;
     }
 
-    const blob = await fetchImageBlob(img);
-    const b64 = await blobToDataURI(blob);
+    const b64 = await fetchImageDataURI(img);
 
     const response = await fetch(`${BACKEND_URL}/translate/image`, {
       method: "POST",
@@ -133,24 +132,28 @@ async function translateImage(img) {
   }
 }
 
-async function fetchImageBlob(img) {
+async function fetchImageDataURI(img) {
+  // Ask the background SW to fetch the image — it has host_permissions and
+  // is exempt from CORS, so cross-origin CDN images (e.g. MangaDex) work.
   if (img.src && img.src.startsWith("http")) {
-    const resp = await fetch(img.src);
-    return resp.blob();
+    const dataURI = await new Promise(resolve =>
+      chrome.runtime.sendMessage({ type: "FETCH_IMAGE_DATA", url: img.src }, resolve)
+    );
+    if (dataURI) return dataURI;
   }
+  // Fallback: canvas (same-origin or images with CORS headers)
   const canvas = document.createElement("canvas");
   canvas.width = img.naturalWidth;
   canvas.height = img.naturalHeight;
   canvas.getContext("2d").drawImage(img, 0, 0);
-  return new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.92));
-}
-
-function blobToDataURI(blob) {
   return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
+    canvas.toBlob(blob => {
+      if (!blob) { reject(new Error("Cannot capture image (cross-origin)")); return; }
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    }, "image/jpeg", 0.92);
   });
 }
 
