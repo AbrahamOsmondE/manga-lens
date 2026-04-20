@@ -199,6 +199,11 @@ async def translate(request: Request):
                 headers={"Content-Type": "application/json"},
             )
         elapsed = time.time() - start
+        if resp.status_code != 200:
+            logger.warning(
+                "translator error: status=%d body=%s",
+                resp.status_code, resp.text[:500],
+            )
         logger.info(
             "user=%s tier=%s pages_today=%d status=%d duration=%.2fs",
             hashed_id, user["tier"], page_count, resp.status_code, elapsed,
