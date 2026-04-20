@@ -17,8 +17,11 @@ let processing = false;
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
 async function getToken() {
-  const { authToken } = await chrome.storage.session.get("authToken");
-  return authToken || null;
+  return new Promise(resolve => {
+    chrome.runtime.sendMessage({ type: "GET_AUTH_TOKEN" }, token => {
+      resolve(token || null);
+    });
+  });
 }
 
 // ── Spinner ───────────────────────────────────────────────────────────────────
