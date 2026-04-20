@@ -95,15 +95,15 @@ async def verify_google_token(token: str) -> dict:
     async with httpx.AsyncClient(timeout=10) as client:
         resp = await client.get(
             "https://oauth2.googleapis.com/tokeninfo",
-            params={"id_token": token},
+            params={"access_token": token},
         )
     if resp.status_code != 200:
         raise HTTPException(401, "Invalid or expired Google token")
 
     data = resp.json()
 
-    # Reject tokens not issued for this app
-    if data.get("aud") != GOOGLE_CLIENT_ID:
+    # Reject tokens not issued for this app (check both aud and azp)
+    if data.get("aud") != GOOGLE_CLIENT_ID and data.get("azp") != GOOGLE_CLIENT_ID:
         raise HTTPException(401, "Token audience mismatch")
 
     # Reject expired tokens (tokeninfo checks this too, but be explicit)

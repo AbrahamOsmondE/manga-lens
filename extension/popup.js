@@ -55,7 +55,7 @@ function renderSignedIn(email, usage, tabEnabled, translated) {
   tierBadge.textContent  = tier;
   tierBadge.className    = `tier-badge ${tier}`;
 
-  if (limit !== null) {
+  if (limit != null) {
     quotaText.textContent = `${used} / ${limit} pages today`;
     quotaBar.style.width  = `${Math.min(100, Math.round((used / limit) * 100))}%`;
     quotaBar.style.background = used >= limit ? "#ef4444" : "#2563eb";
