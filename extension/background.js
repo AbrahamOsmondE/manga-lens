@@ -61,6 +61,18 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.blob();
       })
+      .then(async blob => {
+        // Normalise to JPEG — handles WebP, data-saver PNGs, etc.
+        // OffscreenCanvas is available in service workers (Chrome 69+).
+        try {
+          const bitmap = await createImageBitmap(blob);
+          const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+          canvas.getContext("2d").drawImage(bitmap, 0, 0);
+          return canvas.convertToBlob({ type: "image/jpeg", quality: 0.95 });
+        } catch {
+          return blob; // fallback: send as-is
+        }
+      })
       .then(blob => new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve(reader.result);

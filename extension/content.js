@@ -77,6 +77,8 @@ function attachSpinner(img) {
   if (!parent) return null;
   if (getComputedStyle(parent).position === "static") parent.style.position = "relative";
   const spinner = createSpinner();
+  spinner.style.top  = `${img.offsetTop  + 8}px`;
+  spinner.style.left = `${img.offsetLeft + 8}px`;
   spinner.dataset.mlSpinner = "1";
   parent.insertBefore(spinner, img.nextSibling);
   return spinner;
