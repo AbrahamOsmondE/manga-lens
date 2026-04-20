@@ -1,13 +1,13 @@
 const BACKEND_URL = "https://api.manga-lens.com";
 
 const CONFIG = {
-  ocr: { ocr: "48px", ignore_bubble: 5 },
-  detector: { detection_size: 1024, unclip_ratio: 2.3 },
+  ocr: { ocr: "48px", ignore_bubble: 0 },
+  detector: { detection_size: 1536, unclip_ratio: 2.5 },
   inpainter: { inpainter: "none" },
   render: { renderer: "manga2eng", disable_font_border: false },
   translator: { translator: "gemini", target_lang: "ENG" },
-  mask_dilation_offset: 0,
-  kernel_size: 1,
+  mask_dilation_offset: 2,
+  kernel_size: 3,
 };
 
 let isEnabled = false;
@@ -180,7 +180,13 @@ async function drainQueue() {
 function isMangaImage(img) {
   if (!img.complete || !img.naturalWidth) return false;
   if (img.dataset.mlTranslated || img.dataset.mlQueued) return false;
-  return img.naturalWidth > 200 && img.naturalHeight > 300;
+  const w = img.naturalWidth;
+  const h = img.naturalHeight;
+  // Must be large enough to be a manga panel
+  if (w < 300 || h < 400) return false;
+  // Skip wide landscape banners/logos (aspect ratio > 2.5 means wider than tall)
+  if (w / h > 2.5) return false;
+  return true;
 }
 
 function processPage() {
