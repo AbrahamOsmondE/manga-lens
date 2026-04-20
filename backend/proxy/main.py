@@ -249,7 +249,8 @@ async def stripe_webhook(request: Request):
     stripe_sub_id = sub["id"]
     customer_id   = sub["customer"]
     status        = sub["status"]   # 'active', 'canceled', 'past_due', etc.
-    period_end    = datetime.fromtimestamp(sub["current_period_end"], tz=timezone.utc)
+    period_end_ts = sub.get("current_period_end")
+    period_end    = datetime.fromtimestamp(period_end_ts, tz=timezone.utc) if period_end_ts else None
     new_tier      = "paid" if status == "active" else "free"
 
     # Look up user by Stripe customer ID stored in subscriptions table
