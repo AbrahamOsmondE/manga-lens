@@ -136,11 +136,33 @@ async def get_or_create_user(google_id: str, email: str) -> dict:
     return {"id": row["id"], "tier": row["tier"]}
 
 
-async def check_and_increment_quota(user_id, tier: str) -> int:
+async def check_quota(user_id, tier: str):
     """
-    Atomically increment daily usage. Returns the new page_count.
-    Raises 429 if the free limit is exceeded.
-    Admin tier bypasses quota and usage tracking entirely.
+    Check if the user is within their daily quota. Raises 429 if exceeded.
+    Does NOT increment — call increment_usage() only on success.
+    Admin tier bypasses quota entirely.
+    """
+    if tier == "admin":
+        return
+
+    today = datetime.now(timezone.utc).date()
+    row = await db.fetchrow(
+        "SELECT page_count FROM daily_usage WHERE user_id = $1 AND day = $2",
+        user_id, today,
+    )
+    count = row["page_count"] if row else 0
+    limit = DAILY_LIMIT[tier]
+    if limit is not None and count >= limit:
+        raise HTTPException(
+            429,
+            f"Daily limit of {limit} pages reached. Upgrade at manga-lens.com",
+        )
+
+
+async def increment_usage(user_id, tier: str) -> int:
+    """
+    Atomically increment daily usage after a successful translation.
+    Returns the new page_count. Admin tier returns 0 (not tracked).
     """
     if tier == "admin":
         return 0
@@ -156,14 +178,7 @@ async def check_and_increment_quota(user_id, tier: str) -> int:
         """,
         user_id, today,
     )
-    count = row["page_count"]
-    limit = DAILY_LIMIT[tier]
-    if limit is not None and count > limit:
-        raise HTTPException(
-            429,
-            f"Daily limit of {limit} pages reached. Upgrade at manga-lens.com",
-        )
-    return count
+    return row["page_count"]
 
 # ── Translation endpoint ──────────────────────────────────────────────────────
 
@@ -184,8 +199,8 @@ async def translate(request: Request):
     # This is a soft guard — the daily quota is the hard limit for free users.
     # A stricter per-minute in-memory guard can be added with Redis if needed.
 
-    # Quota check + increment
-    page_count = await check_and_increment_quota(user["id"], user["tier"])
+    # Check quota before attempting translation (don't increment yet)
+    await check_quota(user["id"], user["tier"])
 
     start = time.time()
     hashed_id = hashlib.sha256(identity["google_id"].encode()).hexdigest()[:12]
@@ -204,6 +219,9 @@ async def translate(request: Request):
                 "translator error: status=%d body=%s",
                 resp.status_code, resp.text[:500],
             )
+            raise HTTPException(resp.status_code, "Translation failed")
+        # Only count successful translations against quota
+        page_count = await increment_usage(user["id"], user["tier"])
         logger.info(
             "user=%s tier=%s pages_today=%d status=%d duration=%.2fs",
             hashed_id, user["tier"], page_count, resp.status_code, elapsed,
