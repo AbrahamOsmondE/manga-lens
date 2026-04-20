@@ -249,7 +249,7 @@ async def stripe_webhook(request: Request):
     stripe_sub_id = sub["id"]
     customer_id   = sub["customer"]
     status        = sub["status"]   # 'active', 'canceled', 'past_due', etc.
-    period_end_ts = sub.get("current_period_end")
+    period_end_ts = getattr(sub, "current_period_end", None)
     period_end    = datetime.fromtimestamp(period_end_ts, tz=timezone.utc) if period_end_ts else None
     new_tier      = "paid" if status == "active" else "free"
 
@@ -262,7 +262,7 @@ async def stripe_webhook(request: Request):
         # First time seeing this subscription — look up by customer metadata
         # Stripe customer metadata should have been set at checkout time
         customer = stripe.Customer.retrieve(customer_id)
-        user_email = customer.get("email")
+        user_email = customer.email
         if user_email:
             user_row = await db.fetchrow(
                 "SELECT id FROM users WHERE email = $1", user_email
