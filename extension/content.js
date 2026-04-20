@@ -11,8 +11,6 @@ const CONFIG = {
 };
 
 let isEnabled = false;
-const queue = [];
-let processing = false;
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
@@ -159,24 +157,6 @@ async function fetchImageDataURI(img) {
   });
 }
 
-// ── Queue ─────────────────────────────────────────────────────────────────────
-
-function enqueue(img) {
-  queue.push(img);
-  if (!processing) drainQueue();
-}
-
-async function drainQueue() {
-  processing = true;
-  while (queue.length > 0) {
-    const img = queue.shift();
-    if (!document.contains(img)) continue;
-    if (img.dataset.mlTranslated) continue;
-    await translateImage(img);
-  }
-  processing = false;
-}
-
 // ── Image detection ───────────────────────────────────────────────────────────
 
 function isMangaImage(img) {
@@ -195,7 +175,7 @@ function processPage() {
   document.querySelectorAll("img").forEach((img) => {
     if (isMangaImage(img)) {
       img.dataset.mlQueued = "1";
-      enqueue(img);
+      translateImage(img); // fire concurrently — all spinners appear at once
     }
   });
 }
