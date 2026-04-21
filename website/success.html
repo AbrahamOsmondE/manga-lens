@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Payment successful — MangaLens</title>
+  <link rel="stylesheet" href="style.css"/>
+  <link rel="icon" type="image/svg+xml" href="icon.svg"/>
+  <style>
+    .success-wrap {
+      min-height: 80vh;
+      display: flex; align-items: center; justify-content: center;
+      text-align: center;
+      background: radial-gradient(ellipse 60% 50% at 50% 40%, rgba(22,163,74,.12) 0%, transparent 70%);
+    }
+    .success-card {
+      max-width: 440px; padding: 0 24px;
+    }
+    .check-circle {
+      width: 72px; height: 72px; border-radius: 50%;
+      background: rgba(22,163,74,.12); border: 1.5px solid rgba(22,163,74,.35);
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 28px;
+      font-size: 32px;
+    }
+    .success-card h1 {
+      font-size: 2rem; font-weight: 800; letter-spacing: -.04em;
+      margin-bottom: 14px;
+    }
+    .success-card p {
+      font-size: 1rem; color: var(--muted); line-height: 1.7;
+      margin-bottom: 32px;
+    }
+    .steps-mini {
+      background: var(--surf); border: 1px solid var(--border);
+      border-radius: 12px; padding: 20px 24px;
+      margin-bottom: 28px; text-align: left;
+      display: flex; flex-direction: column; gap: 14px;
+    }
+    .step-mini { display: flex; gap: 12px; align-items: flex-start; }
+    .step-mini-num {
+      width: 24px; height: 24px; border-radius: 6px; flex-shrink: 0;
+      background: rgba(37,99,235,.15); border: 1px solid rgba(59,130,246,.25);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 800; color: var(--blue-lt);
+    }
+    .step-mini p { font-size: 13.5px; color: var(--muted); margin: 0; line-height: 1.5; }
+    .step-mini strong { color: var(--text); }
+  </style>
+</head>
+<body>
+
+<nav class="nav">
+  <a href="/" class="nav-logo">
+    <svg class="nav-logo-icon" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+      <rect width="128" height="128" rx="22" fill="#0b1121"/>
+      <path fill="#1e40af" d="M32,12 L96,12 Q112,12 112,28 L112,76 Q112,92 96,92 L60,92 L50,114 L46,92 L32,92 Q16,92 16,76 L16,28 Q16,12 32,12 Z"/>
+      <ellipse cx="64" cy="51" rx="31" ry="20" fill="white" opacity="0.92"/>
+      <circle cx="64" cy="51" r="13" fill="#0b1121"/>
+      <circle cx="64" cy="51" r="7" fill="#3b82f6"/>
+      <circle cx="70" cy="46" r="4" fill="white" opacity="0.65"/>
+    </svg>
+    MangaLens
+  </a>
+</nav>
+
+<div class="success-wrap">
+  <div class="success-card">
+    <div class="check-circle">✓</div>
+    <h1>You're all set.</h1>
+    <p>Payment confirmed. Your account has been upgraded to <strong style="color:#e6edf3">Pro</strong> — unlimited translations, starting now.</p>
+
+    <div class="steps-mini">
+      <div class="step-mini">
+        <div class="step-mini-num">1</div>
+        <p>Click the <strong>MangaLens icon</strong> in your Chrome toolbar to open the extension.</p>
+      </div>
+      <div class="step-mini">
+        <div class="step-mini-num">2</div>
+        <p>Hit the <strong>↻ refresh button</strong> (top-right of the popup) to load your Pro status.</p>
+      </div>
+      <div class="step-mini">
+        <div class="step-mini-num">3</div>
+        <p>Your badge now shows <strong>PRO</strong>. Start translating — no daily limit.</p>
+      </div>
+    </div>
+
+    <a href="/" class="btn btn-outline" style="width:100%;justify-content:center">Back to home</a>
+  </div>
+</div>
+
+<footer class="footer">
+  <div class="footer-inner">
+    <a href="/" class="footer-logo">
+      <svg class="footer-logo-icon" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+        <rect width="128" height="128" rx="22" fill="#0b1121"/>
+        <path fill="#1e40af" d="M32,12 L96,12 Q112,12 112,28 L112,76 Q112,92 96,92 L60,92 L50,114 L46,92 L32,92 Q16,92 16,76 L16,28 Q16,12 32,12 Z"/>
+        <ellipse cx="64" cy="51" rx="31" ry="20" fill="white" opacity="0.92"/>
+        <circle cx="64" cy="51" r="13" fill="#0b1121"/>
+        <circle cx="64" cy="51" r="7" fill="#3b82f6"/>
+        <circle cx="70" cy="46" r="4" fill="white" opacity="0.65"/>
+      </svg>
+      MangaLens
+    </a>
+    <span class="footer-copy">© 2025 MangaLens</span>
+  </div>
+</footer>
+
+</body>
+</html>

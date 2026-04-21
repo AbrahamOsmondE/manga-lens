@@ -1,13 +1,11 @@
 #!/bin/bash
-# Verifies the deployed proxy is working correctly.
+# Verifies the deployed proxy is working correctly (Phase 2 — Google OAuth).
 # Run via: make smoke-test
-# Requires: GCE_IP, MANGA_API_KEY set in backend/.env
 set -euo pipefail
 
 : "${GCE_IP:?GCE_IP is not set. Add it to backend/.env}"
-: "${MANGA_API_KEY:?MANGA_API_KEY is not set. Add it to backend/.env}"
 
-BASE="http://${GCE_IP}:8080"
+HTTPS_BASE="https://api.manga-lens.com"
 PASS=0
 FAIL=0
 
@@ -22,27 +20,32 @@ check() {
     fi
 }
 
-echo "=== Smoke test: ${BASE} ==="
+echo "=== Smoke test: ${HTTPS_BASE} ==="
 echo ""
 
-# Wrong key → 401
-STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-    -X POST -H "X-API-Key: wrongkey" "${BASE}/translate/image")
-check "401 on wrong API key" "401" "${STATUS}"
+# No auth header → 401
+STATUS=$(curl -s --ssl-no-revoke -o /dev/null -w "%{http_code}" \
+    -X POST "${HTTPS_BASE}/translate/image")
+check "401 with no Authorization header" "401" "${STATUS}"
 
-# Valid key, empty body → 422 (FastAPI validation — proves request reached the proxy)
-STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+# Invalid Bearer token → 401
+STATUS=$(curl -s --ssl-no-revoke -o /dev/null -w "%{http_code}" \
     -X POST \
-    -H "X-API-Key: ${MANGA_API_KEY}" \
+    -H "Authorization: Bearer not-a-real-token" \
     -H "Content-Type: application/json" \
     -d '{}' \
-    "${BASE}/translate/image")
-check "valid key reaches proxy (expect 422 from FastAPI validation)" "422" "${STATUS}"
+    "${HTTPS_BASE}/translate/image")
+check "401 with invalid Bearer token" "401" "${STATUS}"
 
-# Port 5003 must be unreachable from the outside
+# Port 5003 must be unreachable from outside
 STATUS=$(curl --connect-timeout 5 -s -o /dev/null -w "%{http_code}" \
     "http://${GCE_IP}:5003/docs" 2>/dev/null) || STATUS="BLOCKED"
 check "port 5003 is not publicly reachable" "BLOCKED" "${STATUS}"
+
+# Port 8080 must be unreachable from outside
+STATUS=$(curl --connect-timeout 5 -s -o /dev/null -w "%{http_code}" \
+    "http://${GCE_IP}:8080/translate/image" 2>/dev/null) || STATUS="BLOCKED"
+check "port 8080 is not publicly reachable" "BLOCKED" "${STATUS}"
 
 echo ""
 echo "Results: ${PASS} passed, ${FAIL} failed"

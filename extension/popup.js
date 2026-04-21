@@ -14,7 +14,9 @@ const quotaBar    = document.getElementById("quotaBar");
 const quotaBarWrap = document.getElementById("quotaBarWrap");
 const upgradeBtn  = document.getElementById("upgradeBtn");
 const toggleBtn   = document.getElementById("toggleBtn");
+const scanBtn     = document.getElementById("scanBtn");
 const statusLine  = document.getElementById("statusLine");
+const refreshBtn  = document.getElementById("refreshBtn");
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -48,9 +50,9 @@ function renderSignedIn(email, usage, tabEnabled, translated) {
 
   userEmail.textContent = email;
 
-  const tier  = usage?.tier || "free";
+  const tier  = usage?.tier || "free";   // "free" only if fetchUsage failed; sign out/in to refresh token
   const used  = usage?.pages_today || 0;
-  const limit = usage?.daily_limit;   // null = unlimited
+  const limit = usage?.daily_limit;     // null = unlimited (paid / admin)
 
   tierBadge.textContent  = tier;
   tierBadge.className    = `tier-badge ${tier}`;
@@ -73,6 +75,7 @@ function renderSignedIn(email, usage, tabEnabled, translated) {
   if (quotaExceeded) {
     toggleBtn.disabled    = true;
     toggleBtn.textContent = "Limit reached";
+    scanBtn.style.display = "none";
     statusLine.textContent = "Upgrade for more translations";
     statusLine.className  = "status-line warn";
     return;
@@ -80,15 +83,19 @@ function renderSignedIn(email, usage, tabEnabled, translated) {
 
   toggleBtn.disabled = false;
   if (tabEnabled) {
-    toggleBtn.textContent = "Disable Translation";
-    toggleBtn.className   = "toggle-btn on";
-    statusLine.innerHTML  = `Translated: <span>${translated}</span> image${translated === 1 ? "" : "s"}`;
-    statusLine.className  = "status-line";
+    toggleBtn.textContent  = "Disable Translation";
+    toggleBtn.className    = "toggle-btn on";
+    scanBtn.style.display  = "block";
+    scanBtn.disabled       = false;
+    scanBtn.textContent    = "Scan for untranslated images";
+    statusLine.innerHTML   = `Translated: <span>${translated}</span> image${translated === 1 ? "" : "s"}`;
+    statusLine.className   = "status-line";
   } else {
-    toggleBtn.textContent = "Enable Translation";
-    toggleBtn.className   = "toggle-btn off";
+    toggleBtn.textContent  = "Enable Translation";
+    toggleBtn.className    = "toggle-btn off";
+    scanBtn.style.display  = "none";
     statusLine.textContent = "Translation is off";
-    statusLine.className  = "status-line";
+    statusLine.className   = "status-line";
   }
 }
 
@@ -103,17 +110,49 @@ async function init() {
   const { userInfo } = await chrome.storage.local.get("userInfo");
   const email = userInfo?.email || "";
 
-  // Fetch live usage from backend
-  const usage = await fetchUsage(token);
+  // Fetch live usage; fall back to cached value if network is unavailable (e.g. after sleep)
+  let usage = await fetchUsage(token);
+  if (usage) {
+    await chrome.storage.local.set({ cachedUsage: usage });
+  } else {
+    const { cachedUsage } = await chrome.storage.local.get("cachedUsage");
+    usage = cachedUsage || null;
+  }
 
-  // Get tab translation state
   const tab = await getActiveTab();
-  const state = tab
-    ? await chrome.runtime.sendMessage({ type: "GET_STATE", tabId: tab.id })
-    : { enabled: false, translated: 0 };
 
-  renderSignedIn(email, usage, state.enabled, state.translated || 0);
+  // Ask the content script directly for enabled state — it persists as long as
+  // the tab lives, so it survives the background service worker being killed on sleep.
+  let tabEnabled = false;
+  let translated  = 0;
+  if (tab) {
+    try {
+      const cs = await chrome.tabs.sendMessage(tab.id, { type: "GET_IS_ENABLED" });
+      tabEnabled = cs?.enabled ?? false;
+    } catch { /* content script not injected on this tab */ }
+
+    // Translation count still comes from SW (best-effort; resets if SW was killed)
+    const swState = await chrome.runtime.sendMessage({ type: "GET_STATE", tabId: tab.id });
+    translated = swState?.translated || 0;
+
+    // If content says enabled but SW lost track, re-sync so subsequent messages work
+    if (tabEnabled && !swState?.enabled) {
+      chrome.runtime.sendMessage({ type: "SET_ENABLED", tabId: tab.id, enabled: true });
+    }
+  }
+
+  renderSignedIn(email, usage, tabEnabled, translated);
 }
+
+// ── Refresh account ───────────────────────────────────────────────────────────
+
+refreshBtn.addEventListener("click", async () => {
+  refreshBtn.classList.add("spinning");
+  // Force a fresh fetch — bypass the cache so we always hit the server
+  await chrome.storage.local.remove("cachedUsage");
+  await init();
+  refreshBtn.classList.remove("spinning");
+});
 
 // ── Sign in ───────────────────────────────────────────────────────────────────
 
@@ -146,6 +185,7 @@ signInBtn.addEventListener("click", async () => {
 
 signOutBtn.addEventListener("click", async () => {
   await chrome.runtime.sendMessage({ type: "SIGN_OUT" });
+  await chrome.storage.local.remove("cachedUsage");
   renderSignedOut();
 });
 
@@ -155,8 +195,15 @@ toggleBtn.addEventListener("click", async () => {
   const tab = await getActiveTab();
   if (!tab) return;
 
-  const state = await chrome.runtime.sendMessage({ type: "GET_STATE", tabId: tab.id });
-  const turningOn = !state.enabled;
+  // Ask content script directly — SW state may be stale after a sleep/restart
+  let currentlyEnabled = false;
+  try {
+    const cs = await chrome.tabs.sendMessage(tab.id, { type: "GET_IS_ENABLED" });
+    currentlyEnabled = cs?.enabled ?? false;
+  } catch {
+    // Content script not injected — treat as disabled
+  }
+  const turningOn = !currentlyEnabled;
 
   await chrome.runtime.sendMessage({ type: "SET_ENABLED", tabId: tab.id, enabled: turningOn });
 
@@ -176,6 +223,20 @@ toggleBtn.addEventListener("click", async () => {
   }
 
   init();
+});
+
+// ── Scan for untranslated ─────────────────────────────────────────────────────
+
+scanBtn.addEventListener("click", async () => {
+  const tab = await getActiveTab();
+  if (!tab) return;
+  scanBtn.disabled    = true;
+  scanBtn.textContent = "Scanning…";
+  try {
+    await chrome.tabs.sendMessage(tab.id, { type: "SCAN_PAGE" });
+  } catch { /* content script not injected yet — ignore */ }
+  // Brief delay so user sees feedback, then refresh count
+  setTimeout(init, 800);
 });
 
 // ── Upgrade link ──────────────────────────────────────────────────────────────

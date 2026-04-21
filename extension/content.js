@@ -183,6 +183,7 @@ function processPage() {
       maybeTranslate(img);
     } else {
       img.addEventListener("load", () => maybeTranslate(img), { once: true });
+      if (!img.dataset.mlTranslated) ioObserver?.observe(img);
     }
   });
 }
@@ -190,9 +191,24 @@ function processPage() {
 // ── Lazy-load observer ────────────────────────────────────────────────────────
 
 let observer = null;
+let ioObserver = null;
 
 function startObserving() {
   if (observer) return;
+
+  // IntersectionObserver: catches images whose src is already set but loading
+  // is deferred by the browser (native loading="lazy") or JS viewport triggers.
+  ioObserver = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      if (!entry.isIntersecting) continue;
+      const img = entry.target;
+      ioObserver.unobserve(img);
+      if (img.dataset.mlTranslated || img.dataset.mlQueued) continue;
+      img.complete ? maybeTranslate(img)
+        : img.addEventListener("load", () => maybeTranslate(img), { once: true });
+    }
+  }, { rootMargin: "300px" });
+
   observer = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
       // New <img> nodes added to DOM
@@ -200,20 +216,26 @@ function startObserving() {
         if (node.nodeName === "IMG") {
           node.complete ? maybeTranslate(node)
             : node.addEventListener("load", () => maybeTranslate(node), { once: true });
+          if (!node.complete && !node.dataset.mlTranslated) ioObserver.observe(node);
         }
         if (node.querySelectorAll) {
           node.querySelectorAll("img").forEach((img) => {
             img.complete ? maybeTranslate(img)
               : img.addEventListener("load", () => maybeTranslate(img), { once: true });
+            if (!img.complete && !img.dataset.mlTranslated) ioObserver.observe(img);
           });
         }
       }
       // src swapped on an existing <img> (common lazy-load pattern)
       if (mutation.type === "attributes" && mutation.target.nodeName === "IMG") {
         const img = mutation.target;
+        // Ignore blob: URLs we set ourselves after translation
+        if (img.src.startsWith("blob:")) continue;
         delete img.dataset.mlQueued; // src changed — treat as new image
+        ioObserver.unobserve(img);
         img.complete ? maybeTranslate(img)
           : img.addEventListener("load", () => maybeTranslate(img), { once: true });
+        if (!img.complete) ioObserver.observe(img);
       }
     }
   });
@@ -228,6 +250,8 @@ function startObserving() {
 function stopObserving() {
   observer?.disconnect();
   observer = null;
+  ioObserver?.disconnect();
+  ioObserver = null;
 }
 
 // ── Message listener ──────────────────────────────────────────────────────────
@@ -235,13 +259,23 @@ function stopObserving() {
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg.type === "TOGGLE_ON") {
     isEnabled = true;
+    startObserving();  // initialize ioObserver before processPage uses it
     processPage();
-    startObserving();
     sendResponse({ ok: true });
   } else if (msg.type === "TOGGLE_OFF") {
     isEnabled = false;
     stopObserving();
     sendResponse({ ok: true });
+  } else if (msg.type === "SCAN_PAGE") {
+    // Clear queued flag on untranslated images so they can be retried/picked up
+    document.querySelectorAll("img").forEach(img => {
+      if (!img.dataset.mlTranslated) delete img.dataset.mlQueued;
+    });
+    processPage();
+    sendResponse({ ok: true });
+  } else if (msg.type === "GET_IS_ENABLED") {
+    // Popup queries this directly — survives background SW restart
+    sendResponse({ enabled: isEnabled });
   } else if (msg.type === "PING") {
     sendResponse({ ok: true });
   }

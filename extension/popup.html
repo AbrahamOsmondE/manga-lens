@@ -58,6 +58,13 @@
       background: none; border: none; padding: 0; white-space: nowrap;
     }
     .sign-out-link:hover { color: #999; }
+    .refresh-btn {
+      font-size: 13px; color: #444; cursor: pointer;
+      background: none; border: none; padding: 0 2px;
+      line-height: 1; transition: color .15s, transform .3s;
+    }
+    .refresh-btn:hover { color: #888; }
+    .refresh-btn.spinning { animation: ml-spin 0.7s linear infinite; color: #666; }
 
     .tier-badge {
       display: inline-block;
@@ -65,8 +72,9 @@
       font-size: 10px; font-weight: 700; letter-spacing: 0.5px;
       text-transform: uppercase;
     }
-    .tier-badge.free { background: #333; color: #aaa; }
-    .tier-badge.paid { background: #1d4ed8; color: #fff; }
+    .tier-badge.free  { background: #333; color: #aaa; }
+    .tier-badge.paid  { background: #1d4ed8; color: #fff; }
+    .tier-badge.admin { background: #7c3aed; color: #fff; }
 
     .quota-row {
       display: flex; align-items: center; justify-content: space-between;
@@ -102,6 +110,16 @@
     .status-line.error { color: #ef4444; }
     .status-line span { color: #ccc; }
 
+    .scan-btn {
+      width: 100%; padding: 8px;
+      background: transparent; color: #666;
+      border: 1px solid #2a2a2a; border-radius: 8px;
+      font-size: 12px; cursor: pointer;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .scan-btn:hover { background: #1a1a1a; color: #aaa; border-color: #444; }
+    .scan-btn:disabled { color: #444; border-color: #1e1e1e; cursor: default; }
+
     hr { border: none; border-top: 1px solid #222; }
   </style>
 </head>
@@ -130,7 +148,10 @@
   <div id="view-signin">
     <div class="user-row">
       <span class="user-email" id="userEmail"></span>
-      <button class="sign-out-link" id="signOutBtn">Sign out</button>
+      <div style="display:flex;align-items:center;gap:8px">
+        <button class="refresh-btn" id="refreshBtn" title="Refresh account">↻</button>
+        <button class="sign-out-link" id="signOutBtn">Sign out</button>
+      </div>
     </div>
 
     <div style="display:flex;align-items:center;gap:6px">
@@ -151,6 +172,7 @@
     <hr/>
 
     <button id="toggleBtn" class="toggle-btn off">Enable Translation</button>
+    <button id="scanBtn" class="scan-btn" style="display:none">Scan for untranslated images</button>
     <div class="status-line" id="statusLine">Translation is off</div>
   </div>
 

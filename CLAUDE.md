@@ -621,17 +621,29 @@ Notes: Cloud SQL has a minimum instance charge even at zero load. Cloud Load Bal
 
 #### Option B — GCP (translator) + Supabase + Vercel
 
+**Current setup (15 GB Docker image):**
+
 | Service | What it does | Monthly cost |
 |---|---|---|
-| GCE e2-medium | Translator + proxy only | ~$25 |
-| Supabase (free tier) | PostgreSQL + auth helpers | $0 (up to 500 MB DB, 2 GB bandwidth) |
+| GCE e2-medium | Translator (15 GB image) + proxy | ~$25 |
+| Supabase (free tier) | PostgreSQL + auth helpers | $0 |
 | Vercel (hobby tier) | Website hosting | $0 |
 | **Total** | | **~$25/month** |
 
-If Supabase free tier is outgrown (unlikely for early users):
-- Supabase Pro: $25/month → total ~$50/month
+**After lightweight translator migration (see Part 12 in TODO):**
 
-**Recommendation**: Start on Option B. The GCE instance is already required for the translator regardless. Supabase and Vercel free tiers comfortably handle hundreds of users. Migrate to Option A only if you need GCP-specific compliance or the free tiers are exhausted.
+| Service | What it does | Monthly cost |
+|---|---|---|
+| GCE e2-small | Lightweight translator (~150 MB) + proxy | ~$13 |
+| Supabase (free tier) | PostgreSQL + auth helpers | $0 |
+| Google Vision API | OCR for text detection | $0 (≤1,000 images/mo free); +$1.50/1,000 above |
+| **Total** | | **~$13/month** (low traffic) — **~$20/month** (5,000 images/mo) |
+| **Net savings vs current** | | **~$12/month** |
+
+If Supabase free tier is outgrown (unlikely for early users):
+- Supabase Pro: $25/month → total ~$38/month
+
+**Recommendation**: Start on Option B and run Part 12 to migrate off the 15 GB Docker image. This halves the VM cost immediately and removes the slow 15 GB pull on every redeploy. The Vision API free tier (1,000 images/month) covers early usage; costs scale linearly after that. Migrate to Option A only if you need GCP-specific compliance or the free tiers are exhausted.
 
 ---
 
@@ -730,8 +742,9 @@ The proxy already supports `tier = 'admin'` — it bypasses quota and usage trac
 
 | Variable | Used by | Phase | Description |
 |---|---|---|---|
-| `GEMINI_API_KEY` | translator container | 1+ | Gemini API key |
-| `GEMINI_MODEL` | translator container | 1+ | Model name, default `gemini-2.5-flash-lite` |
+| `GEMINI_API_KEY` | translator container (legacy) | 1 | Gemini API key — only needed if running the original 15 GB Docker image |
+| `GEMINI_MODEL` | translator container (legacy) | 1 | Model name — only needed with the legacy Docker image |
+| `GOOGLE_VISION_API_KEY` | lightweight translator service | 12+ | Google Cloud Vision API key — replaces Gemini/OCR in the lightweight pipeline |
 | `GOOGLE_CLIENT_ID` | proxy + extension manifest | 2+ | OAuth client ID from GCP Console |
 | `DATABASE_URL` | proxy | 2+ | Supabase postgres connection string |
 | `STRIPE_SECRET_KEY` | proxy | 2+ | Stripe secret key |

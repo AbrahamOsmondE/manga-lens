@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>MangaLens — Read Manga in English, Instantly</title>
+  <meta name="description" content="Translate Japanese manga pages to English in real time — right in your browser. Free to start."/>
+  <link rel="stylesheet" href="style.css"/>
+  <link rel="icon" type="image/svg+xml" href="icon.svg"/>
+  <style>
+    /* ── Hero ── */
+    .hero-wrap {
+      overflow: hidden; position: relative;
+      background: radial-gradient(ellipse 80% 60% at 50% -10%, rgba(37,99,235,.18) 0%, transparent 70%);
+    }
+    .hero {
+      max-width: 1080px; margin: 0 auto; padding: 96px 48px 88px;
+      display: grid; grid-template-columns: 1fr 420px; gap: 72px; align-items: center;
+    }
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 12px; border-radius: 100px;
+      background: rgba(37,99,235,.12); border: 1px solid rgba(59,130,246,.28);
+      font-size: 12px; font-weight: 600; color: var(--blue-lt);
+      margin-bottom: 22px;
+    }
+    .hero h1 {
+      font-size: clamp(2rem, 4.2vw, 3.4rem);
+      font-weight: 800; line-height: 1.12; letter-spacing: -.04em;
+      margin-bottom: 20px;
+    }
+    .hero h1 em { font-style: normal; color: var(--blue-lt); }
+    .hero-sub {
+      font-size: 1.1rem; color: var(--muted); line-height: 1.72;
+      max-width: 480px; margin-bottom: 36px;
+    }
+    .hero-actions { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+    .hero-note { margin-top: 14px; font-size: 12px; color: var(--faint); }
+    .hero-note a { color: var(--faint); text-decoration: underline; }
+
+    /* Extension popup mockup */
+    .popup-mock {
+      background: #111; border-radius: 16px;
+      border: 1px solid #1e1e1e;
+      box-shadow:
+        0 0 0 1px rgba(255,255,255,.04),
+        0 32px 80px rgba(0,0,0,.7),
+        0 0 60px rgba(37,99,235,.08);
+      overflow: hidden; width: 240px; margin: 0 auto;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      position: relative;
+    }
+    .pm-inner { padding: 18px 16px 16px; display: flex; flex-direction: column; gap: 10px; }
+    .pm-header {
+      display: flex; align-items: center; gap: 8px;
+      padding-bottom: 14px; border-bottom: 1px solid #1a1a1a;
+    }
+    .pm-logo {
+      width: 28px; height: 28px; background: var(--blue);
+      border-radius: 6px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .pm-logo svg { width: 18px; height: 18px; }
+    .pm-title { font-size: 14px; font-weight: 700; color: #fff; }
+    .pm-row { display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: #666; }
+    .pm-email { color: #888; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 160px; }
+    .pm-tier {
+      display: inline-block; padding: 2px 8px; border-radius: 10px;
+      background: #1d4ed8; color: #fff;
+      font-size: 10px; font-weight: 700; letter-spacing: .4px;
+    }
+    .pm-quota { font-size: 11px; color: #666; }
+    .pm-bar-wrap { height: 4px; background: #1a1a1a; border-radius: 2px; overflow: hidden; }
+    .pm-bar { height: 100%; width: 22%; background: var(--blue); border-radius: 2px; }
+    .pm-btn {
+      padding: 11px; background: #16a34a; color: #fff;
+      border-radius: 8px; text-align: center;
+      font-size: 13px; font-weight: 600;
+    }
+    .pm-status { font-size: 11px; color: #888; text-align: center; }
+    .pm-status strong { color: #ccc; }
+
+    /* Manga panel mock beside popup */
+    .visual-wrap {
+      position: relative; display: flex; justify-content: center; align-items: center;
+    }
+    .manga-mock {
+      position: absolute; right: -40px; top: 20px;
+      width: 160px; border-radius: 4px; overflow: hidden;
+      border: 1px solid #1c1c1c;
+      box-shadow: 0 8px 32px rgba(0,0,0,.5);
+      transform: rotate(3deg);
+      pointer-events: none;
+    }
+    .manga-panel {
+      background: #f8f8f8; height: 90px; border-bottom: 1px solid #ddd;
+      display: flex; align-items: center; justify-content: center;
+      padding: 12px; position: relative;
+    }
+    .manga-bubble {
+      background: white; border: 1.5px solid #222; border-radius: 50%;
+      padding: 6px 10px; font-size: 9px; font-weight: 600; color: #111;
+      text-align: center; line-height: 1.3;
+      box-shadow: 0 1px 4px rgba(0,0,0,.1);
+    }
+    .manga-panel2 { background: #f0f0f0; height: 70px; }
+    /* Translated overlay indicator */
+    .translated-badge {
+      position: absolute; top: 4px; right: 4px;
+      background: #16a34a; color: #fff;
+      font-size: 7px; font-weight: 700; letter-spacing: .3px;
+      padding: 2px 5px; border-radius: 3px;
+    }
+
+    /* ── How it works ── */
+    .how { background: var(--surf); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+    .steps {
+      display: grid; grid-template-columns: repeat(3,1fr); gap: 40px;
+      margin-top: 52px;
+    }
+    .step { display: flex; flex-direction: column; gap: 14px; }
+    .step-num {
+      width: 42px; height: 42px; border-radius: 10px;
+      background: rgba(37,99,235,.12); border: 1px solid rgba(59,130,246,.25);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 17px; font-weight: 800; color: var(--blue-lt);
+    }
+    .step h3 { font-size: 15px; font-weight: 700; }
+    .step p  { font-size: 13.5px; color: var(--muted); line-height: 1.65; }
+
+    /* connector dots */
+    .steps-wrap { position: relative; }
+
+    /* ── Features ── */
+    .features-grid {
+      display: grid; grid-template-columns: repeat(2,1fr); gap: 14px;
+      margin-top: 52px;
+    }
+    .feat-card {
+      background: var(--surf); border: 1px solid var(--border);
+      border-radius: var(--r); padding: 28px;
+      transition: border-color .2s, background .2s;
+    }
+    .feat-card:hover { border-color: var(--border2); background: var(--surf2); }
+    .feat-icon {
+      width: 42px; height: 42px; border-radius: 10px;
+      background: rgba(37,99,235,.1);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px; margin-bottom: 16px;
+    }
+    .feat-card h3 { font-size: 15px; font-weight: 700; margin-bottom: 8px; }
+    .feat-card p  { font-size: 13.5px; color: var(--muted); line-height: 1.65; }
+
+    /* ── Pricing teaser ── */
+    .price-teaser { background: var(--surf); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+    .tier-cards {
+      display: grid; grid-template-columns: repeat(2,1fr); gap: 16px;
+      margin-top: 48px;
+    }
+    .tier-card {
+      border: 1px solid var(--border); border-radius: var(--r);
+      padding: 28px 28px 24px; background: var(--bg);
+    }
+    .tier-card.pop { border-color: var(--blue); background: rgba(37,99,235,.04); }
+    .tc-badge {
+      display: inline-block; padding: 3px 10px; border-radius: 6px;
+      font-size: 10.5px; font-weight: 700; letter-spacing: .05em;
+      text-transform: uppercase; margin-bottom: 14px;
+    }
+    .tc-badge.free { background: var(--surf2); color: var(--muted); }
+    .tc-badge.pro  { background: rgba(37,99,235,.18); color: var(--blue-lt); }
+    .tc-price { font-size: 2.4rem; font-weight: 800; line-height: 1; margin-bottom: 4px; letter-spacing: -.04em; }
+    .tc-price small { font-size: .9rem; font-weight: 500; color: var(--muted); vertical-align: super; }
+    .tc-period { font-size: 12px; color: var(--faint); margin-bottom: 20px; }
+    .tc-list { list-style: none; display: flex; flex-direction: column; gap: 9px; margin-bottom: 22px; }
+    .tc-list li { font-size: 13.5px; color: var(--muted); display: flex; gap: 9px; align-items: flex-start; }
+    .tc-list li::before { content: "✓"; color: var(--blue-lt); font-weight: 700; flex-shrink: 0; }
+    .price-teaser .section-actions { margin-top: 32px; text-align: center; }
+
+    /* ── CTA ── */
+    .cta-wrap {
+      text-align: center;
+      background: radial-gradient(ellipse 70% 80% at 50% 120%, rgba(37,99,235,.14) 0%, transparent 70%);
+    }
+    .cta-wrap .inner { padding: 100px 48px; }
+    .cta-wrap h2 {
+      font-size: clamp(1.8rem, 3.5vw, 2.8rem);
+      font-weight: 800; letter-spacing: -.04em; line-height: 1.15;
+      margin-bottom: 18px;
+    }
+    .cta-wrap p { font-size: 1.05rem; color: var(--muted); margin-bottom: 34px; }
+
+    /* ── Responsive ── */
+    @media (max-width: 900px) {
+      .hero { grid-template-columns: 1fr; padding: 64px 20px 56px; gap: 48px; }
+      .visual-wrap { justify-content: center; }
+      .manga-mock { display: none; }
+    }
+    @media (max-width: 840px) {
+      .steps { grid-template-columns: 1fr; gap: 28px; }
+      .features-grid { grid-template-columns: 1fr; }
+      .tier-cards { grid-template-columns: 1fr; }
+      .cta-wrap .inner { padding: 72px 20px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Nav ──────────────────────────────────────────────────────────────── -->
+<nav class="nav">
+  <a href="/" class="nav-logo">
+    <svg class="nav-logo-icon" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+      <rect width="128" height="128" rx="22" fill="#0b1121"/>
+      <path fill="#1e40af" d="M32,12 L96,12 Q112,12 112,28 L112,76 Q112,92 96,92 L60,92 L50,114 L46,92 L32,92 Q16,92 16,76 L16,28 Q16,12 32,12 Z"/>
+      <ellipse cx="64" cy="51" rx="31" ry="20" fill="white" opacity="0.92"/>
+      <circle cx="64" cy="51" r="13" fill="#0b1121"/>
+      <circle cx="64" cy="51" r="7" fill="#3b82f6"/>
+      <circle cx="70" cy="46" r="4" fill="white" opacity="0.65"/>
+    </svg>
+    MangaLens
+  </a>
+  <ul class="nav-links">
+    <li><a href="#how">How it works</a></li>
+    <li><a href="#features">Features</a></li>
+    <li><a href="pricing.html">Pricing</a></li>
+    <li><a href="mailto:hello@manga-lens.com">Contact</a></li>
+  </ul>
+  <a href="pricing.html" class="btn btn-primary">Get started free</a>
+</nav>
+
+<!-- ── Hero ─────────────────────────────────────────────────────────────── -->
+<div class="hero-wrap">
+  <div class="hero">
+    <div class="hero-text">
+      <div class="hero-badge">
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+          <circle cx="5" cy="5" r="4" fill="#3b82f6" opacity=".4"/>
+          <circle cx="5" cy="5" r="2.5" fill="#3b82f6"/>
+        </svg>
+        Chrome Extension · Free to start
+      </div>
+      <h1>Read manga in<br/><em>English, instantly.</em></h1>
+      <p class="hero-sub">
+        MangaLens translates Japanese speech bubbles on any manga page — right in your browser. No copy-pasting, no separate tabs, no waiting.
+      </p>
+      <div class="hero-actions">
+        <a href="pricing.html" class="btn btn-primary btn-lg">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          Add to Chrome — Free
+        </a>
+        <a href="pricing.html" class="btn btn-outline btn-lg">See pricing</a>
+      </div>
+      <p class="hero-note">20 free translations daily. No credit card required. <a href="pricing.html">Upgrade</a> for unlimited.</p>
+    </div>
+
+    <div class="visual-wrap">
+      <!-- Extension popup mock -->
+      <div class="popup-mock">
+        <div class="pm-inner">
+          <div class="pm-header">
+            <div class="pm-logo">
+              <svg viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+                <path fill="white" d="M32,12 L96,12 Q112,12 112,28 L112,76 Q112,92 96,92 L60,92 L50,114 L46,92 L32,92 Q16,92 16,76 L16,28 Q16,12 32,12 Z"/>
+                <ellipse cx="64" cy="51" rx="28" ry="18" fill="#2563eb"/>
+                <circle cx="64" cy="51" r="10" fill="white"/>
+                <circle cx="68" cy="47" r="3" fill="white" opacity="0.5"/>
+              </svg>
+            </div>
+            <div class="pm-title">MangaLens</div>
+          </div>
+
+          <div class="pm-row">
+            <span class="pm-email">reader@gmail.com</span>
+            <span style="color:#555;font-size:11px;cursor:pointer">Sign out</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <span class="pm-tier">PRO</span>
+            <span style="flex:1;font-size:11px;color:#666;text-align:right">Unlimited</span>
+          </div>
+          <div class="pm-btn">Disable Translation</div>
+          <div class="pm-status">Translated: <strong>14</strong> images</div>
+        </div>
+      </div>
+
+      <!-- Manga panel mockup -->
+      <div class="manga-mock">
+        <div class="manga-panel">
+          <div class="manga-bubble">But I already<br/>know the answer!</div>
+          <span class="translated-badge">ML ✓</span>
+        </div>
+        <div class="manga-panel2"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── How it works ──────────────────────────────────────────────────────── -->
+<section class="section how" id="how">
+  <div class="inner">
+    <div class="eyebrow">How it works</div>
+    <h2 class="section-title">Three steps. Then just read.</h2>
+    <p class="section-sub">No setup wizard, no configuration. Install and you're reading in under a minute.</p>
+
+    <div class="steps steps-wrap">
+      <div class="step">
+        <div class="step-num">1</div>
+        <h3>Install the extension</h3>
+        <p>Add MangaLens to Chrome from the Web Store in one click. It's free — no account needed to install.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <h3>Sign in with Google</h3>
+        <p>One tap auth. No passwords or extra accounts — your Google identity ties your free quota and subscription together.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <h3>Click "Enable Translation"</h3>
+        <p>Navigate to any manga page and hit the button. Every speech bubble on the page translates automatically — including new ones as you scroll.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Features ──────────────────────────────────────────────────────────── -->
+<section class="section" id="features">
+  <div class="inner">
+    <div class="eyebrow">Features</div>
+    <h2 class="section-title">Everything you need. Nothing you don't.</h2>
+
+    <div class="features-grid">
+      <div class="feat-card">
+        <div class="feat-icon">🌐</div>
+        <h3>Works on any manga site</h3>
+        <p>MangaDex, fan scanlations, official publishers — if the page has an image, MangaLens can translate it. No site-specific integrations required.</p>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon">⚡</div>
+        <h3>Real-time, as you scroll</h3>
+        <p>New panels that load as you scroll are detected and translated automatically. Never wait for the whole page to queue up.</p>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon">🤖</div>
+        <h3>Powered by Gemini AI</h3>
+        <p>Translation uses Google's Gemini model — accurate, context-aware, and handles manga-specific phrases, sound effects, and honorifics.</p>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon">🔒</div>
+        <h3>Privacy-first</h3>
+        <p>Authentication is handled entirely by Google OAuth — no passwords stored, no third-party tracking. Your Google identity is verified on every request.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Pricing teaser ─────────────────────────────────────────────────────── -->
+<section class="section price-teaser">
+  <div class="inner">
+    <div class="eyebrow">Pricing</div>
+    <h2 class="section-title">Free to start. Affordable to scale.</h2>
+    <p class="section-sub">The free tier covers casual reading. The Pro plan is for when you can't stop.</p>
+
+    <div class="tier-cards">
+      <div class="tier-card">
+        <div class="tc-badge free">Free</div>
+        <div class="tc-price">$0</div>
+        <div class="tc-period">forever free</div>
+        <ul class="tc-list">
+          <li>20 page translations per day</li>
+          <li>Google sign-in, no setup</li>
+          <li>Works on all manga sites</li>
+        </ul>
+        <a href="pricing.html" class="btn btn-outline" style="width:100%;justify-content:center">Get started</a>
+      </div>
+      <div class="tier-card pop">
+        <div class="tc-badge pro">Pro</div>
+        <div class="tc-price"><small>$</small>3.99</div>
+        <div class="tc-period">per month · first month free</div>
+        <ul class="tc-list">
+          <li>Unlimited translations</li>
+          <li>Everything in Free</li>
+          <li>Cancel any time</li>
+        </ul>
+        <a href="pricing.html" class="btn btn-primary" style="width:100%;justify-content:center">Start free trial</a>
+      </div>
+    </div>
+
+    <div class="section-actions">
+      <a href="pricing.html" class="btn btn-ghost">Compare all plans →</a>
+    </div>
+  </div>
+</section>
+
+<!-- ── CTA ───────────────────────────────────────────────────────────────── -->
+<section class="section cta-wrap">
+  <div class="inner">
+    <h2>Start reading today.<br/>It's free.</h2>
+    <p>Join readers who never miss a panel because of a language barrier.</p>
+    <a href="pricing.html" class="btn btn-primary btn-lg">
+      Add to Chrome — Free
+    </a>
+  </div>
+</section>
+
+<!-- ── Footer ────────────────────────────────────────────────────────────── -->
+<footer class="footer">
+  <div class="footer-inner">
+    <a href="/" class="footer-logo">
+      <svg class="footer-logo-icon" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+        <rect width="128" height="128" rx="22" fill="#0b1121"/>
+        <path fill="#1e40af" d="M32,12 L96,12 Q112,12 112,28 L112,76 Q112,92 96,92 L60,92 L50,114 L46,92 L32,92 Q16,92 16,76 L16,28 Q16,12 32,12 Z"/>
+        <ellipse cx="64" cy="51" rx="31" ry="20" fill="white" opacity="0.92"/>
+        <circle cx="64" cy="51" r="13" fill="#0b1121"/>
+        <circle cx="64" cy="51" r="7" fill="#3b82f6"/>
+        <circle cx="70" cy="46" r="4" fill="white" opacity="0.65"/>
+      </svg>
+      MangaLens
+    </a>
+    <nav class="footer-links">
+      <a href="/">Home</a>
+      <a href="pricing.html">Pricing</a>
+      <a href="mailto:hello@manga-lens.com">Contact</a>
+    </nav>
+    <span class="footer-copy">© 2025 MangaLens</span>
+  </div>
+</footer>
+
+</body>
+</html>
