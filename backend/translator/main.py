@@ -220,7 +220,19 @@ def translate(req: TranslateRequest):
 
     # Rendering uses freetype globals — serialize within this worker process
     with _render_lock:
-        result = render_textblock_list_eng(img=img_white, text_regions=regions, original_img=img_white)
+        result, failed_xywhs = render_textblock_list_eng(img=img_white, text_regions=regions, original_img=img_white)
+
+    # Restore original pixels for any bubble where rendering failed — leave
+    # the Japanese text visible rather than showing an empty white box.
+    if failed_xywhs:
+        h, w = img.shape[:2]
+        pad = 15
+        for xywh in failed_xywhs:
+            x1 = max(0, int(xywh[0]) - pad)
+            y1 = max(0, int(xywh[1]) - pad)
+            x2 = min(w, int(xywh[0]) + int(xywh[2]) + pad)
+            y2 = min(h, int(xywh[1]) + int(xywh[3]) + pad)
+            result[y1:y2, x1:x2] = img[y1:y2, x1:x2]
 
     result_bgr = cv2.cvtColor(result, cv2.COLOR_RGB2BGR)
     _, buf = cv2.imencode(".png", result_bgr)

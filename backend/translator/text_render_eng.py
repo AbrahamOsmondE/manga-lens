@@ -402,6 +402,7 @@ def render_textblock_list_eng(
                 update_enlarged_xyxy(region)
                 update_enlarged_xyxy(region2)
 
+    failed_xywhs = []
     for region in text_regions:
         try:
             words = seg_eng(region.translation)
@@ -494,6 +495,6 @@ def render_textblock_list_eng(
             img_pil.paste(textlines_image, (abs_x, abs_y), mask=textlines_image)
 
         except Exception:
-            pass  # skip this bubble; don't crash the whole render
+            failed_xywhs.append(region.xywh)
 
-    return np.array(img_pil)
+    return np.array(img_pil), failed_xywhs
