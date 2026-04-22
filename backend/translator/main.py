@@ -189,6 +189,14 @@ def translate(req: TranslateRequest):
 
     bubbles = _cluster(blocks)
 
+    # Drop page numbers and very short noise (≤2 chars, all digits/punctuation)
+    bubbles = [b for b in bubbles if len(b["text"].replace(" ", "")) > 2
+               or not b["text"].replace(" ", "").replace(".", "").isdigit()]
+
+    if not bubbles:
+        _, buf = cv2.imencode(".png", img_bgr)
+        return Response(content=buf.tobytes(), media_type="image/png")
+
     # Translate all bubbles concurrently — one thread per bubble
     with ThreadPoolExecutor(max_workers=min(8, len(bubbles))) as pool:
         translations = list(pool.map(_translate_text, [b["text"] for b in bubbles]))
@@ -201,7 +209,7 @@ def translate(req: TranslateRequest):
             x=b["x1"], y=b["y1"],
             w=b["x2"] - b["x1"], h=b["y2"] - b["y1"],
             translation=b["translated"],
-            font_size=max(10, min((b["x2"] - b["x1"]) // 6, (b["y2"] - b["y1"]) // 6, 20)),
+            font_size=max(14, min((b["x2"] - b["x1"]) // 3, (b["y2"] - b["y1"]) // 2, 40)),
         )
         for b in bubbles if b.get("translated", "").strip()
     ]
