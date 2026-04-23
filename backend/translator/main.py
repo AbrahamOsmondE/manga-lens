@@ -209,7 +209,7 @@ def translate(req: TranslateRequest):
             x=b["x1"], y=b["y1"],
             w=b["x2"] - b["x1"], h=b["y2"] - b["y1"],
             translation=b["translated"],
-            font_size=max(14, min((b["x2"] - b["x1"]) // 3, (b["y2"] - b["y1"]) // 2, 40)),
+            font_size=max(24, min((b["x2"] - b["x1"]) // 3, (b["y2"] - b["y1"]) // 2, 40)),
         )
         for b in bubbles if b.get("translated", "").strip()
     ]
