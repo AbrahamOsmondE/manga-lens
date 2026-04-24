@@ -17,8 +17,6 @@ services:
       - TRANSLATOR_URL=http://translator:5003
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
       - DATABASE_URL=${DATABASE_URL}
-      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
-      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
     depends_on:
       - translator
     restart: unless-stopped

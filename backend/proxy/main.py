@@ -15,7 +15,6 @@ socket.getaddrinfo = _getaddrinfo_ipv4
 
 import asyncpg
 import httpx
-import stripe
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -29,8 +28,6 @@ from starlette.responses import JSONResponse
 GOOGLE_CLIENT_ID  = os.environ["GOOGLE_CLIENT_ID"]
 TRANSLATOR_URL    = os.environ.get("TRANSLATOR_URL", "http://localhost:5003")
 DATABASE_URL      = os.environ["DATABASE_URL"]
-STRIPE_WEBHOOK_SECRET = os.environ["STRIPE_WEBHOOK_SECRET"]
-stripe.api_key    = os.environ["STRIPE_SECRET_KEY"]
 
 DAILY_LIMIT = {"free": 20, "paid": None, "admin": None}
 
@@ -265,68 +262,3 @@ async def usage(request: Request):
         "daily_limit": DAILY_LIMIT[user["tier"]],
     }
 
-# ── Stripe webhook ────────────────────────────────────────────────────────────
-
-@app.post("/webhook/stripe")
-async def stripe_webhook(request: Request):
-    payload = await request.body()
-    sig = request.headers.get("stripe-signature", "")
-    try:
-        event = stripe.Webhook.construct_event(payload, sig, STRIPE_WEBHOOK_SECRET)
-    except stripe.error.SignatureVerificationError:
-        raise HTTPException(400, "Invalid Stripe signature")
-
-    sub = event["data"]["object"]
-    stripe_sub_id = sub["id"]
-    customer_id   = sub["customer"]
-    status        = sub["status"]   # 'active', 'canceled', 'past_due', etc.
-    period_end_ts = getattr(sub, "current_period_end", None)
-    period_end    = datetime.fromtimestamp(period_end_ts, tz=timezone.utc) if period_end_ts else None
-    new_tier      = "paid" if status == "active" else "free"
-
-    # Look up user by Stripe customer ID stored in subscriptions table
-    user_row = await db.fetchrow(
-        "SELECT user_id FROM subscriptions WHERE id = $1", stripe_sub_id
-    )
-
-    if user_row is None:
-        # First time seeing this subscription — look up by customer metadata
-        # Stripe customer metadata should have been set at checkout time
-        customer = stripe.Customer.retrieve(customer_id)
-        user_email = customer.email
-        if user_email:
-            user_row = await db.fetchrow(
-                "SELECT id FROM users WHERE email = $1", user_email
-            )
-            if user_row:
-                await db.execute(
-                    """
-                    INSERT INTO subscriptions (id, user_id, status, current_period_end)
-                    VALUES ($1, $2, $3, $4)
-                    ON CONFLICT (id) DO UPDATE
-                      SET status = EXCLUDED.status,
-                          current_period_end = EXCLUDED.current_period_end,
-                          updated_at = now()
-                    """,
-                    stripe_sub_id, user_row["id"], status, period_end,
-                )
-                await db.execute(
-                    "UPDATE users SET tier = $1 WHERE id = $2",
-                    new_tier, user_row["id"],
-                )
-    else:
-        await db.execute(
-            """
-            UPDATE subscriptions
-            SET status = $1, current_period_end = $2, updated_at = now()
-            WHERE id = $3
-            """,
-            status, period_end, stripe_sub_id,
-        )
-        await db.execute(
-            "UPDATE users SET tier = $1 WHERE user_id = $2",
-            new_tier, user_row["user_id"],
-        )
-
-    logger.info("stripe event=%s sub=%s status=%s tier=%s", event["type"], stripe_sub_id, status, new_tier)
-    return {"ok": True}

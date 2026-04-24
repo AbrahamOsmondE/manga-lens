@@ -1,5 +1,4 @@
 const BACKEND_URL = "https://api.manga-lens.com";
-const STRIPE_PAYMENT_URL = "https://manga-lens.com/pricing";
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
 
@@ -12,7 +11,6 @@ const tierBadge   = document.getElementById("tierBadge");
 const quotaText   = document.getElementById("quotaText");
 const quotaBar    = document.getElementById("quotaBar");
 const quotaBarWrap = document.getElementById("quotaBarWrap");
-const upgradeBtn  = document.getElementById("upgradeBtn");
 const toggleBtn   = document.getElementById("toggleBtn");
 const scanBtn     = document.getElementById("scanBtn");
 const statusLine  = document.getElementById("statusLine");
@@ -62,12 +60,10 @@ function renderSignedIn(email, usage, tabEnabled, translated) {
     quotaBar.style.width  = `${Math.min(100, Math.round((used / limit) * 100))}%`;
     quotaBar.style.background = used >= limit ? "#ef4444" : "#2563eb";
     quotaBarWrap.style.display = "block";
-    upgradeBtn.style.display   = used >= limit ? "block" : "none";
   } else {
     quotaText.textContent = `${used} pages today`;
     quotaBar.style.width  = "0%";
     quotaBarWrap.style.display = "none";
-    upgradeBtn.style.display   = "none";
   }
 
   // Toggle button
@@ -76,7 +72,7 @@ function renderSignedIn(email, usage, tabEnabled, translated) {
     toggleBtn.disabled    = true;
     toggleBtn.textContent = "Limit reached";
     scanBtn.style.display = "none";
-    statusLine.textContent = "Upgrade for more translations";
+    statusLine.textContent = "Daily limit reached";
     statusLine.className  = "status-line warn";
     return;
   }
@@ -239,12 +235,6 @@ scanBtn.addEventListener("click", async () => {
   setTimeout(init, 800);
 });
 
-// ── Upgrade link ──────────────────────────────────────────────────────────────
-
-upgradeBtn.addEventListener("click", () => {
-  chrome.tabs.create({ url: STRIPE_PAYMENT_URL });
-});
-
 // ── Listen for messages from content.js ──────────────────────────────────────
 
 chrome.runtime.onMessage.addListener((msg) => {
@@ -253,7 +243,6 @@ chrome.runtime.onMessage.addListener((msg) => {
   } else if (msg.type === "QUOTA_EXCEEDED") {
     statusLine.textContent = msg.detail || "Daily limit reached.";
     statusLine.className = "status-line error";
-    upgradeBtn.style.display = "block";
   }
 });
 
