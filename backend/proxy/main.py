@@ -29,7 +29,6 @@ GOOGLE_CLIENT_ID  = os.environ["GOOGLE_CLIENT_ID"]
 TRANSLATOR_URL    = os.environ.get("TRANSLATOR_URL", "http://localhost:5003")
 DATABASE_URL      = os.environ["DATABASE_URL"]
 
-DAILY_LIMIT = {"free": 20, "paid": None, "admin": None}
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -133,29 +132,6 @@ async def get_or_create_user(google_id: str, email: str) -> dict:
     return {"id": row["id"], "tier": row["tier"]}
 
 
-async def check_quota(user_id, tier: str):
-    """
-    Check if the user is within their daily quota. Raises 429 if exceeded.
-    Does NOT increment — call increment_usage() only on success.
-    Admin tier bypasses quota entirely.
-    """
-    if tier == "admin":
-        return
-
-    today = datetime.now(timezone.utc).date()
-    row = await db.fetchrow(
-        "SELECT page_count FROM daily_usage WHERE user_id = $1 AND day = $2",
-        user_id, today,
-    )
-    count = row["page_count"] if row else 0
-    limit = DAILY_LIMIT[tier]
-    if limit is not None and count >= limit:
-        raise HTTPException(
-            429,
-            f"Daily limit of {limit} pages reached. Upgrade at manga-lens.com",
-        )
-
-
 async def increment_usage(user_id, tier: str) -> int:
     """
     Atomically increment daily usage after a successful translation.
@@ -195,9 +171,6 @@ async def translate(request: Request):
     # Per-user rate limit: 10 req/min (enforced via DB increment + count check)
     # This is a soft guard — the daily quota is the hard limit for free users.
     # A stricter per-minute in-memory guard can be added with Redis if needed.
-
-    # Check quota before attempting translation (don't increment yet)
-    await check_quota(user["id"], user["tier"])
 
     start = time.time()
     hashed_id = hashlib.sha256(identity["google_id"].encode()).hexdigest()[:12]
@@ -248,9 +221,6 @@ async def usage(request: Request):
     identity = await verify_google_token(token)
     user = await get_or_create_user(identity["google_id"], identity["email"])
 
-    if user["tier"] == "admin":
-        return {"tier": "admin", "pages_today": 0, "daily_limit": None}
-
     today = datetime.now(timezone.utc).date()
     row = await db.fetchrow(
         "SELECT page_count FROM daily_usage WHERE user_id = $1 AND day = $2",
@@ -259,6 +229,6 @@ async def usage(request: Request):
     return {
         "tier": user["tier"],
         "pages_today": row["page_count"] if row else 0,
-        "daily_limit": DAILY_LIMIT[user["tier"]],
+        "daily_limit": None,
     }
 

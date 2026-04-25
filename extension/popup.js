@@ -9,8 +9,6 @@ const signOutBtn  = document.getElementById("signOutBtn");
 const userEmail   = document.getElementById("userEmail");
 const tierBadge   = document.getElementById("tierBadge");
 const quotaText   = document.getElementById("quotaText");
-const quotaBar    = document.getElementById("quotaBar");
-const quotaBarWrap = document.getElementById("quotaBarWrap");
 const toggleBtn   = document.getElementById("toggleBtn");
 const scanBtn     = document.getElementById("scanBtn");
 const statusLine  = document.getElementById("statusLine");
@@ -48,34 +46,13 @@ function renderSignedIn(email, usage, tabEnabled, translated) {
 
   userEmail.textContent = email;
 
-  const tier  = usage?.tier || "free";   // "free" only if fetchUsage failed; sign out/in to refresh token
-  const used  = usage?.pages_today || 0;
-  const limit = usage?.daily_limit;     // null = unlimited (paid / admin)
+  const tier = usage?.tier || "free";
+  const used = usage?.pages_today || 0;
 
-  tierBadge.textContent  = tier;
-  tierBadge.className    = `tier-badge ${tier}`;
+  tierBadge.textContent = tier;
+  tierBadge.className   = `tier-badge ${tier}`;
 
-  if (limit != null) {
-    quotaText.textContent = `${used} / ${limit} pages today`;
-    quotaBar.style.width  = `${Math.min(100, Math.round((used / limit) * 100))}%`;
-    quotaBar.style.background = used >= limit ? "#ef4444" : "#2563eb";
-    quotaBarWrap.style.display = "block";
-  } else {
-    quotaText.textContent = `${used} pages today`;
-    quotaBar.style.width  = "0%";
-    quotaBarWrap.style.display = "none";
-  }
-
-  // Toggle button
-  const quotaExceeded = limit !== null && used >= limit;
-  if (quotaExceeded) {
-    toggleBtn.disabled    = true;
-    toggleBtn.textContent = "Limit reached";
-    scanBtn.style.display = "none";
-    statusLine.textContent = "Daily limit reached";
-    statusLine.className  = "status-line warn";
-    return;
-  }
+  quotaText.textContent = `${used} pages today`;
 
   toggleBtn.disabled = false;
   if (tabEnabled) {
@@ -240,9 +217,6 @@ scanBtn.addEventListener("click", async () => {
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type === "AUTH_REQUIRED") {
     renderSignedOut();
-  } else if (msg.type === "QUOTA_EXCEEDED") {
-    statusLine.textContent = msg.detail || "Daily limit reached.";
-    statusLine.className = "status-line error";
   }
 });
 
