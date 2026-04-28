@@ -147,7 +147,7 @@ def _translate_text(text: str) -> str:
     try:
         resp = _translate_session.get(
             "https://translate.googleapis.com/translate_a/single",
-            params={"client": "gtx", "sl": "ja", "tl": "en", "dt": "t", "q": text},
+            params={"client": "gtx", "sl": "auto", "tl": "en", "dt": "t", "q": text},
             timeout=10,
         )
         parts = resp.json()[0]
