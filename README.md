@@ -2,6 +2,8 @@
 
 Translates Japanese manga pages to English in real time via a Chrome extension. Manga panels are sent to a backend translation service and returned with English text rendered inside the original speech bubbles.
 
+> **Disclaimer:** Translation quality is limited. OCR and machine translation work best on clean, high-resolution panels with standard fonts. Handwritten text, stylised lettering, and small or overlapping bubbles may produce inaccurate or missing translations. Results are intended as a reading aid, not a polished translation.
+
 ## Architecture
 
 ```
