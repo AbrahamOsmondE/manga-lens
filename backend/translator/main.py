@@ -4,7 +4,6 @@ import time
 import base64
 import logging
 import threading
-from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 
 import cv2
@@ -151,46 +150,60 @@ def _paint_white(img: np.ndarray, bubbles: list, pad: int = 15) -> np.ndarray:
 
 # ── Translation ───────────────────────────────────────────────────────────────
 
-def _translate_text(text: str) -> str:
-    if not text.strip():
-        return text
+def _translate_batch(texts: list[str]) -> list[str]:
+    """Translate all bubble texts in a single Gemini API call."""
+    if not texts:
+        return texts
     if _gemini_model:
         try:
-            cleaned = " ".join(text.split())
+            import json
+            cleaned = [" ".join(t.split()) for t in texts]
             prompt = (
-                "You are translating manga/manhwa speech bubbles to English. "
-                "The text was extracted by OCR and may have extra spaces between characters — treat it as continuous text. "
-                "Translate naturally into colloquial English, preserving tone, emotion, and speech style. "
-                "Korean interjections like '자!' mean 'Come on!' or 'Now!' — not the word 'ruler'. "
-                "Keep the translation SHORT — speech bubbles have limited space. "
-                "Use contractions and casual language. Aim for the same length or shorter than the original. "
-                "Do not be overly literal. Return only the translated English text, nothing else.\n\n"
-                f"Text: {cleaned}"
+                "You are translating manga/manhwa speech bubbles to English.\n"
+                "The text was extracted by OCR and may have extra spaces between characters — treat each item as continuous text.\n"
+                "Translate naturally into colloquial English, preserving tone, emotion, and speech style.\n"
+                "Keep each translation SHORT — speech bubbles have limited space. Use contractions and casual language.\n"
+                "Korean/Japanese interjections like '자!' mean 'Come on!' or 'Now!' — not the word 'ruler'.\n"
+                "Sound effects and single characters should get a natural English equivalent.\n\n"
+                f"Input JSON array: {json.dumps(cleaned, ensure_ascii=False)}\n\n"
+                "Return a JSON array of the same length with English translations only. No explanation, no markdown."
             )
             t0 = time.time()
             resp = requests.post(
                 f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={GEMINI_KEY}",
                 json={"contents": [{"parts": [{"text": prompt}]}]},
-                timeout=15,
+                timeout=30,
             )
             resp.raise_for_status()
-            result = resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
-            logger.info("gemini %.2fs | %s → %s", time.time() - t0, text[:40], result[:40])
-            return result
+            raw = resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+            # Strip markdown code fences if present
+            if raw.startswith("```"):
+                raw = raw.split("```")[1]
+                if raw.startswith("json"):
+                    raw = raw[4:]
+            translations = json.loads(raw)
+            if isinstance(translations, list) and len(translations) == len(texts):
+                logger.info("gemini batch %.2fs | %d bubbles", time.time() - t0, len(texts))
+                for orig, trans in zip(texts, translations):
+                    logger.info("  %s → %s", orig[:50], trans[:50])
+                return [str(t) for t in translations]
         except Exception as e:
-            logger.warning("Gemini translation failed: %s — falling back to Google Translate", e)
-    # Fallback: Google Translate unofficial endpoint
-    try:
-        resp = requests.get(
-            "https://translate.googleapis.com/translate_a/single",
-            params={"client": "gtx", "sl": "auto", "tl": "en", "dt": "t", "q": text},
-            timeout=10,
-        )
-        parts = resp.json()[0]
-        return "".join(p[0] for p in parts if p[0])
-    except Exception as e:
-        logger.warning("Translation failed: %s", e)
-        return text
+            logger.warning("Gemini batch translation failed: %s — falling back to Google Translate", e)
+    # Fallback: Google Translate per bubble
+    results = []
+    for text in texts:
+        try:
+            resp = requests.get(
+                "https://translate.googleapis.com/translate_a/single",
+                params={"client": "gtx", "sl": "auto", "tl": "en", "dt": "t", "q": text},
+                timeout=10,
+            )
+            parts = resp.json()[0]
+            results.append("".join(p[0] for p in parts if p[0]))
+        except Exception as e:
+            logger.warning("Translation failed for %r: %s", text[:30], e)
+            results.append(text)
+    return results
 
 
 # ── Endpoint ──────────────────────────────────────────────────────────────────
@@ -237,10 +250,8 @@ def translate(req: TranslateRequest):
         _, buf = cv2.imencode(".png", img_bgr)
         return Response(content=buf.tobytes(), media_type="image/png")
 
-    # Translate all bubbles concurrently — one thread per bubble
     t_translate = time.time()
-    with ThreadPoolExecutor(max_workers=min(8, len(bubbles))) as pool:
-        translations = list(pool.map(_translate_text, [b["text"] for b in bubbles]))
+    translations = _translate_batch([b["text"] for b in bubbles])
     t_translate_done = time.time()
     for b, t in zip(bubbles, translations):
         b["translated"] = t
