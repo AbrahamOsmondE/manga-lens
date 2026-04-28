@@ -58,7 +58,7 @@ db: asyncpg.Pool | None = None
 @app.on_event("startup")
 async def startup():
     global db
-    db = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=5)
+    db = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=5, statement_cache_size=0)
     # Create tables if they don't exist yet (idempotent)
     async with db.acquire() as conn:
         await conn.execute("""
