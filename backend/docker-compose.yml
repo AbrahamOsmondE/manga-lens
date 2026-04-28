@@ -7,6 +7,7 @@ services:
       - "5003:5003"
     environment:
       - GOOGLE_VISION_API_KEY=${GOOGLE_VISION_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
     restart: unless-stopped
 
   proxy:

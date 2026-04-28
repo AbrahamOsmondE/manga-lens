@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 import cv2
 import numpy as np
 import requests
+import google.generativeai as genai
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel
@@ -21,17 +22,20 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 logger = logging.getLogger(__name__)
 
 VISION_KEY = os.environ.get("GOOGLE_VISION_API_KEY", "")
+GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
 
 # freetype face objects are not thread-safe — serialize render calls within each worker
 _render_lock = threading.Lock()
 
 # Shared session for Vision API calls — reuses TCP connections
 _vision_session = requests.Session()
-_translate_session = requests.Session()
+
+_gemini_model = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global _gemini_model
     font_path = next(
         (os.path.join(FONTS_DIR, f) for f in ["anime_ace_3.ttf", "Arial-Unicode-Regular.ttf"]
          if os.path.exists(os.path.join(FONTS_DIR, f))),
@@ -41,6 +45,12 @@ async def lifespan(app: FastAPI):
         raise RuntimeError(f"No font found in {FONTS_DIR}")
     set_font(font_path)
     logger.info("Font loaded: %s", font_path)
+    if GEMINI_KEY:
+        genai.configure(api_key=GEMINI_KEY)
+        _gemini_model = genai.GenerativeModel("gemini-2.0-flash-lite")
+        logger.info("Gemini translation model loaded")
+    else:
+        logger.warning("GEMINI_API_KEY not set — falling back to Google Translate")
     yield
 
 
@@ -139,13 +149,26 @@ def _paint_white(img: np.ndarray, bubbles: list, pad: int = 15) -> np.ndarray:
     return out
 
 
-# ── Google Translate (unofficial free endpoint) ───────────────────────────────
+# ── Translation ───────────────────────────────────────────────────────────────
 
 def _translate_text(text: str) -> str:
     if not text.strip():
         return text
+    if _gemini_model:
+        try:
+            prompt = (
+                "You are translating manga speech bubbles to English. "
+                "Translate naturally — preserve tone, emotion, and manga speech style. "
+                "Do not be overly literal. Return only the translated text, nothing else.\n\n"
+                f"Text: {text}"
+            )
+            result = _gemini_model.generate_content(prompt)
+            return result.text.strip()
+        except Exception as e:
+            logger.warning("Gemini translation failed: %s — falling back to Google Translate", e)
+    # Fallback: Google Translate unofficial endpoint
     try:
-        resp = _translate_session.get(
+        resp = requests.get(
             "https://translate.googleapis.com/translate_a/single",
             params={"client": "gtx", "sl": "auto", "tl": "en", "dt": "t", "q": text},
             timeout=10,
