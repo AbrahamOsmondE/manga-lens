@@ -1,172 +1,160 @@
 # MangaLens
 
-Translates Japanese manga pages to English in real time via a Chrome extension. Manga panels are sent to a backend translation service and returned with English text rendered inside the original speech bubbles.
+Translates manga pages to English in real time via a Chrome extension. Visit any manga reading site, toggle the extension on, and every panel is sent to a backend translation service — speech bubbles are replaced with English text in place.
+
+Supports Japanese and Korean manga.
 
 > **Disclaimer:** Translation quality is limited. OCR and machine translation work best on clean, high-resolution panels with standard fonts. Handwritten text, stylised lettering, and small or overlapping bubbles may produce inaccurate or missing translations. Results are intended as a reading aid, not a polished translation.
+
+---
 
 ## Architecture
 
 ```
-Chrome Extension (content script)
+Chrome Extension (Manifest V3)
         │
-        │  POST /translate/image  (X-API-Key header)
+        │  POST https://api.manga-lens.com/translate/image
+        │  Authorization: Bearer <google_access_token>
         ▼
-Auth Proxy  (port 8080, public)
+nginx  (port 443, TLS termination — GCE instance)
         │
-        │  internal only
         ▼
-manga-image-translator  (port 5003, internal)
-        │
-        │  Gemini API (translation)
+Auth Proxy  (port 8080, internal — FastAPI)
+        │  1. Verify Google OAuth token
+        │  2. Upsert user in Supabase
+        │  3. Track daily usage
         ▼
-  Translated PNG returned
+Translator  (port 5003, internal)
+        │  Google Vision API → OCR
+        │  Google Translate  → text
+        │  freetype          → typeset English into bubbles
+        ▼
+  Translated image returned to extension
+
+Supabase (PostgreSQL) ← proxy reads/writes users, daily_usage
 ```
 
-## Prerequisites
+Only port 443 is publicly exposed. Ports 8080 and 5003 are internal only.
 
-- [Docker](https://docs.docker.com/get-docker/) and Docker Compose
-- [GNU Make](https://www.gnu.org/software/make/)
-- [gcloud CLI](https://cloud.google.com/sdk/docs/install) (for GCP deployment)
-- A [Gemini API key](https://aistudio.google.com/) (free tier available)
-- Python 3.10+ with `pytest` and `requests`
+---
+
+## Repository structure
+
+```
+manga-lens/
+├── backend/
+│   ├── docker-compose.yml     — runs translator + auth proxy
+│   ├── .env.example
+│   ├── proxy/                 — FastAPI auth proxy
+│   │   ├── main.py
+│   │   ├── requirements.txt
+│   │   └── Dockerfile
+│   ├── translator/            — lightweight Vision API translator (~150 MB)
+│   │   ├── main.py
+│   │   ├── requirements.txt
+│   │   └── Dockerfile
+│   └── nginx/
+│       └── mangalens.conf
+├── extension/                 — Chrome extension (Manifest V3)
+│   ├── manifest.json
+│   ├── background.js
+│   ├── content.js
+│   ├── popup.html
+│   ├── popup.js
+│   └── icons/
+├── bubble_typeset/            — OCR + typesetting pipeline (used by translator)
+└── website/                   — Static landing page (manga-lens.com)
+```
+
+---
 
 ## Local development
+
+### Prerequisites
+
+- Docker and Docker Compose
+- A [Google Cloud](https://console.cloud.google.com) project with **Cloud Vision API** enabled
+- A [Google OAuth 2.0 client ID](https://console.cloud.google.com/apis/credentials) (Chrome Extension type)
+- A [Supabase](https://supabase.com) project (free tier)
 
 ### 1. Configure environment
 
 ```bash
 cp backend/.env.example backend/.env
-# Edit backend/.env and fill in GEMINI_API_KEY
+# Fill in GOOGLE_VISION_API_KEY, GOOGLE_CLIENT_ID, DATABASE_URL
 ```
 
-### 2. Start the local translator
+### 2. Start the services
 
 ```bash
 make up
 ```
 
-The first run downloads the `zyddnys/manga-image-translator` image (~15 GB) — expected, happens once only.
-The server is ready when you see `manga-translator | INFO: Application startup complete`.
-
-### 3. Run the integration test
-
-Place a Japanese manga page at `tests/fixtures/sample.jpg`, then:
-
-```bash
-make test
+Both the translator and auth proxy start. Ready when you see:
+```
+translator_1  | INFO: Application startup complete.
+proxy_1       | INFO: Application startup complete.
 ```
 
-Open `tests/output/translated.jpg` to visually verify English text inside the speech bubbles.
-Expected runtime: ~6–7 seconds per page.
-
-### 4. Stop the backend
+### 3. Stop
 
 ```bash
 make down
 ```
 
-### Batch translation
-
-```python
-from tests.test_translation import translate_batch
-
-translate_batch(
-    image_paths=["page1.jpg", "page2.jpg", "page3.jpg"],
-    output_dir="tests/output/batch"
-)
-```
-
-Output files are saved as `translated_001.png`, `translated_002.png`, etc.
-
 ---
 
-## GCP Deployment
+## Deployment (GCE)
 
-### 1. Generate an API key
+The production stack runs on a single GCE `e2-small` instance with nginx fronting both services.
 
-```bash
-make generate-key
-# Copy the output into backend/.env as MANGA_API_KEY
-```
-
-### 2. Create a GCE VM (manual — GCP Console)
-
-- **Machine type**: `e2-medium` (2 vCPU, 4 GB RAM)
-- **OS**: Ubuntu 22.04 LTS
-- **Boot disk**: 50 GB standard persistent disk
-- **Firewall**: allow TCP `8080` inbound; do **not** expose `5003` or `5004`
-
-After creation, note the **External IP** and add it to `backend/.env` as `GCE_IP`.
-Also set `GCE_INSTANCE` and `GCE_ZONE` in `backend/.env` to match your VM.
-
-### 3. Install Docker on the instance (run once)
+### Instance setup (once)
 
 ```bash
-make install-docker
+make install-docker   # installs Docker on the remote instance
 ```
 
-Log out and SSH back in (or run `newgrp docker`) before the next step.
-
-### 4. Deploy
+### Deploy
 
 ```bash
-make deploy
+make deploy           # rsync code + .env, restart containers
+make logs-remote      # follow live logs
 ```
 
-Copies `docker-compose.yml`, `.env`, and `backend/proxy/` to the instance and starts the containers.
-Follow startup with:
+### nginx setup (once, on the instance)
 
 ```bash
-make logs-remote
+sudo cp backend/nginx/mangalens.conf /etc/nginx/sites-available/mangalens
+sudo ln -s /etc/nginx/sites-available/mangalens /etc/nginx/sites-enabled/mangalens
+sudo mkdir -p /var/www/manga-lens.com
+sudo cp ~/manga-lens/website/* /var/www/manga-lens.com/
+sudo nginx -t && sudo systemctl reload nginx
+sudo certbot --nginx -d api.manga-lens.com -d manga-lens.com -d www.manga-lens.com
 ```
 
-### 5. Verify the deployment
-
-```bash
-make smoke-test
-```
-
-Checks:
-- `401` returned for a wrong API key
-- Valid key reaches the proxy
-- Port `5003` is not publicly reachable
-
-### 6. Run the integration test against the live backend
-
-```bash
-make test-remote
-```
-
-Target: passes in under 15 seconds.
-
-### Other useful commands
-
-| Command | Description |
-|---|---|
-| `make ssh` | SSH into the GCE instance |
-| `make logs-remote` | Follow live container logs |
-| `make check-ports` | Quick manual port reachability check |
+Certbot adds SSL certificates and auto-renews via systemd timer.
 
 ---
 
 ## Chrome Extension
 
-1. Fill in `extension/content.js` lines 1–2 with your `GCE_IP` and `MANGA_API_KEY`
-2. Open `chrome://extensions` → enable **Developer mode** → **Load unpacked** → select the `extension/` folder
-3. Visit a manga page, click the MangaLens icon, and toggle **Enable Translation**
+Available on the [Chrome Web Store](https://chromewebstore.google.com/detail/mangalens/oddcfdifonkninodiokblpheefnkmaig).
+
+To load unpacked for development:
+
+1. Open `chrome://extensions` → enable **Developer mode** → **Load unpacked** → select the `extension/` folder
+2. Sign in with Google via the popup
+3. Visit any manga page and toggle **Enable Translation**
 
 ---
 
-## Translation config
+## Environment variables
 
-The verified config used in all tests (locked in `tests/test_translation.py`):
-
-| Setting | Value | Notes |
+| Variable | Service | Description |
 |---|---|---|
-| OCR | `48px` | Fixed-size OCR pass |
-| Detector | `detection_size: 1024`, `unclip_ratio: 2.3` | 2.3× box inflation gives best bubble coverage |
-| Inpainter | `none` | Fills detected text area with white before re-rendering |
-| Renderer | `manga2eng` | Sizes English text to fit the original bubble |
-| Translator | `gemini` / `ENG` | Gemini 2.5 Flash Lite via `GEMINI_MODEL` env var |
-| Mask dilation | `0` | Keeps white fill as tight as possible |
-| Kernel size | `1` | Minimal smoothing on mask edges |
+| `GOOGLE_VISION_API_KEY` | translator | Google Cloud Vision API key for OCR |
+| `GOOGLE_CLIENT_ID` | proxy + extension | OAuth client ID from GCP Console |
+| `DATABASE_URL` | proxy | Supabase postgres connection string |
+| `GCE_IP` | Makefile | External IP of the GCE instance |
+| `GCE_INSTANCE` | Makefile | VM instance name |
+| `GCE_ZONE` | Makefile | GCP zone (e.g. `asia-southeast1-b`) |
