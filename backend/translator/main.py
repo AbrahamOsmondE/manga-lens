@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 import base64
 import logging
 import threading
@@ -161,16 +162,21 @@ def _translate_text(text: str) -> str:
                 "The text was extracted by OCR and may have extra spaces between characters — treat it as continuous text. "
                 "Translate naturally into colloquial English, preserving tone, emotion, and speech style. "
                 "Korean interjections like '자!' mean 'Come on!' or 'Now!' — not the word 'ruler'. "
+                "Keep the translation SHORT — speech bubbles have limited space. "
+                "Use contractions and casual language. Aim for the same length or shorter than the original. "
                 "Do not be overly literal. Return only the translated English text, nothing else.\n\n"
                 f"Text: {cleaned}"
             )
+            t0 = time.time()
             resp = requests.post(
                 f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={GEMINI_KEY}",
                 json={"contents": [{"parts": [{"text": prompt}]}]},
                 timeout=15,
             )
             resp.raise_for_status()
-            return resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+            result = resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+            logger.info("gemini %.2fs | %s → %s", time.time() - t0, text[:40], result[:40])
+            return result
         except Exception as e:
             logger.warning("Gemini translation failed: %s — falling back to Google Translate", e)
     # Fallback: Google Translate unofficial endpoint
@@ -194,6 +200,8 @@ def translate(req: TranslateRequest):
     if not VISION_KEY:
         raise HTTPException(500, "GOOGLE_VISION_API_KEY not configured")
 
+    t_start = time.time()
+
     try:
         b64data = req.image.split(",", 1)[-1]
         image_bytes = base64.b64decode(b64data)
@@ -207,11 +215,13 @@ def translate(req: TranslateRequest):
     img = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
 
     # OCR — one Vision API call returns all text in the image
+    t_ocr = time.time()
     try:
         blocks = _vision_detect(image_bytes)
     except Exception as e:
         logger.error("Vision API error: %s", e)
         raise HTTPException(502, "OCR unavailable")
+    t_ocr_done = time.time()
 
     if not blocks:
         _, buf = cv2.imencode(".png", img_bgr)
@@ -228,11 +238,12 @@ def translate(req: TranslateRequest):
         return Response(content=buf.tobytes(), media_type="image/png")
 
     # Translate all bubbles concurrently — one thread per bubble
+    t_translate = time.time()
     with ThreadPoolExecutor(max_workers=min(8, len(bubbles))) as pool:
         translations = list(pool.map(_translate_text, [b["text"] for b in bubbles]))
+    t_translate_done = time.time()
     for b, t in zip(bubbles, translations):
         b["translated"] = t
-        logger.info("translated | %s → %s", b["text"], t)
 
     img_white = _paint_white(img, bubbles)
     regions = [
@@ -267,6 +278,14 @@ def translate(req: TranslateRequest):
 
     result_bgr = cv2.cvtColor(result, cv2.COLOR_RGB2BGR)
     _, buf = cv2.imencode(".png", result_bgr)
+    t_total = time.time() - t_start
+    logger.info(
+        "done | bubbles=%d ocr=%.2fs translate=%.2fs total=%.2fs",
+        len(bubbles),
+        t_ocr_done - t_ocr,
+        t_translate_done - t_translate,
+        t_total,
+    )
     return Response(content=buf.tobytes(), media_type="image/png")
 
 
