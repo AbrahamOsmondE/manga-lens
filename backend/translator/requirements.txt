@@ -6,4 +6,3 @@ freetype-py
 numpy
 requests
 pydantic
-google-generativeai

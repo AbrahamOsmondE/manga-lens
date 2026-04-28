@@ -9,7 +9,6 @@ from contextlib import asynccontextmanager
 import cv2
 import numpy as np
 import requests
-import google.generativeai as genai
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel
@@ -23,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 VISION_KEY = os.environ.get("GOOGLE_VISION_API_KEY", "")
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash-lite")
 
 # freetype face objects are not thread-safe — serialize render calls within each worker
 _render_lock = threading.Lock()
@@ -46,9 +46,8 @@ async def lifespan(app: FastAPI):
     set_font(font_path)
     logger.info("Font loaded: %s", font_path)
     if GEMINI_KEY:
-        genai.configure(api_key=GEMINI_KEY)
-        _gemini_model = genai.GenerativeModel("gemini-2.0-flash-lite")
-        logger.info("Gemini translation model loaded")
+        _gemini_model = True  # flag — REST API is stateless, no client object needed
+        logger.info("Gemini translation enabled: %s", GEMINI_MODEL)
     else:
         logger.warning("GEMINI_API_KEY not set — falling back to Google Translate")
     yield
@@ -156,14 +155,22 @@ def _translate_text(text: str) -> str:
         return text
     if _gemini_model:
         try:
+            cleaned = " ".join(text.split())
             prompt = (
-                "You are translating manga speech bubbles to English. "
-                "Translate naturally — preserve tone, emotion, and manga speech style. "
-                "Do not be overly literal. Return only the translated text, nothing else.\n\n"
-                f"Text: {text}"
+                "You are translating manga/manhwa speech bubbles to English. "
+                "The text was extracted by OCR and may have extra spaces between characters — treat it as continuous text. "
+                "Translate naturally into colloquial English, preserving tone, emotion, and speech style. "
+                "Korean interjections like '자!' mean 'Come on!' or 'Now!' — not the word 'ruler'. "
+                "Do not be overly literal. Return only the translated English text, nothing else.\n\n"
+                f"Text: {cleaned}"
             )
-            result = _gemini_model.generate_content(prompt)
-            return result.text.strip()
+            resp = requests.post(
+                f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={GEMINI_KEY}",
+                json={"contents": [{"parts": [{"text": prompt}]}]},
+                timeout=15,
+            )
+            resp.raise_for_status()
+            return resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
         except Exception as e:
             logger.warning("Gemini translation failed: %s — falling back to Google Translate", e)
     # Fallback: Google Translate unofficial endpoint

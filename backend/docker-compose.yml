@@ -8,6 +8,7 @@ services:
     environment:
       - GOOGLE_VISION_API_KEY=${GOOGLE_VISION_API_KEY}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.5-flash-lite}
     restart: unless-stopped
 
   proxy:
