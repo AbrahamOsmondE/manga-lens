@@ -202,6 +202,7 @@ def translate(req: TranslateRequest):
         translations = list(pool.map(_translate_text, [b["text"] for b in bubbles]))
     for b, t in zip(bubbles, translations):
         b["translated"] = t
+        logger.info("translated | %s → %s", b["text"], t)
 
     img_white = _paint_white(img, bubbles)
     regions = [
